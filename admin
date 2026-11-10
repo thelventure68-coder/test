@@ -248,6 +248,7 @@ def is_internal_key(title: str) -> bool:
         or t.startswith(GIF_STORE_PREFIX)
         or t.startswith(ALBUM_STORE_PREFIX)
         or t.startswith(EP_COV_STORE_PREFIX)
+        or t.startswith("__NOTIF_WATCH__")
         or t == USER_START_KEY
         or t.startswith("__RATE__")
         or t.startswith("__CFG__")
@@ -2620,6 +2621,34 @@ def delete_entire_drama_in_db(drama_title):
     supabase.table("drama_covers").delete().in_("drama_title", cov_keys).execute()
     try:
         supabase.table("drama_covers").delete().like("drama_title", f"{EP_COV_STORE_PREFIX}{drama_title}__%").execute()
+
+        # Remove notification watch tokens that point to the deleted drama.
+        # Tokens are stored as __NOTIF_WATCH__<token>; their target is JSON in cover_file_id.
+        watch_rows = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_file_id")
+            .like("drama_title", "__NOTIF_WATCH__%")
+            .execute()
+        )
+        stale_watch_keys = []
+        for watch_row in (watch_rows.data or []):
+            watch_key = str(watch_row.get("drama_title") or "")
+            if not watch_key.startswith("__NOTIF_WATCH__"):
+                continue
+            try:
+                watch_payload = json.loads(watch_row.get("cover_file_id") or "{}")
+            except (TypeError, ValueError):
+                continue
+            if (
+                isinstance(watch_payload, dict)
+                and str(watch_payload.get("drama_title") or "").strip() == drama_title
+            ):
+                stale_watch_keys.append(watch_key)
+
+        if stale_watch_keys:
+            supabase.table("drama_covers").delete().in_(
+                "drama_title", stale_watch_keys
+            ).execute()
         for prefix in [
             SYN_STORE_PREFIX,
             LANG_STORE_PREFIX,
