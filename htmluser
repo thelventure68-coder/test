@@ -1,0 +1,4534 @@
+<!doctype html>
+<html lang="km">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta name="Expires" content="0">
+  <meta name="theme-color" content="#000000">
+  <title>χƒαη 18 קɭυѕ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@300;400;500;600;700&family=Koh+Santepheap:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://telegram.org/js/telegram-web-app.js" async onload="try{const tg=window.Telegram?.WebApp;if(tg){tg.ready();tg.expand();tg.setHeaderColor?.('#000000');tg.setBackgroundColor?.('#000000');tg.setBottomBarColor?.('#000000');}}catch(e){}"></script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #000000;
+      --panel: #080808;
+      --panel-hover: #121212;
+      --border: #1f1f1f;
+      --text: #f2f2f2;
+      --muted: #8e8e8e;
+      --accent: #d9d9d9;
+      --gold: #d4d4d4;
+      --rose: #a3a3a3;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      width: 100%;
+      background: #000000;
+      overflow-x: hidden;
+      overflow-y: scroll;
+      scrollbar-gutter: stable;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      width: 0px;
+      height: 0px;
+      display: none;
+    }
+
+    body {
+      margin: 0;
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Kantumruy Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 14px;
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    /* =========================================
+       XFANSTER Splash Screen (Sword Slash X Animation)
+       ========================================= */
+    .app-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background-color: #000000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      opacity: 1;
+      visibility: visible;
+      will-change: opacity, transform;
+      transition: opacity 0.48s cubic-bezier(0.22, 1, 0.36, 1),
+                  visibility 0.48s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .app-splash.hide {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .splash-bg-glow {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 1) 68%);
+    }
+
+    .splash-content {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .splash-logo-svg {
+      width: 156px;
+      height: 156px;
+      overflow: visible;
+      filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.35));
+      animation: xImpactShake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) 0.36s both,
+                 logoGlowPulse 2.2s ease-in-out infinite alternate 0.85s;
+    }
+
+    /* ផ្នែកអក្សរ X មុនពេលត្រូវដាវកាត់ */
+    .x-frame-top {
+      opacity: 0;
+      transform-origin: center;
+      animation: xFrameAppear 0.28s cubic-bezier(0.22, 1, 0.36, 1) 0.04s forwards,
+                 xSplitTopLeft 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.34s forwards;
+    }
+
+    .x-frame-bottom {
+      opacity: 0;
+      transform-origin: center;
+      animation: xFrameAppear 0.28s cubic-bezier(0.22, 1, 0.36, 1) 0.04s forwards,
+                 xSplitBottomRight 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.34s forwards;
+    }
+
+    /* ផ្លែដាវកាប់កាត់ទទឹង (Sword Slash) */
+    .x-blade-main {
+      opacity: 0;
+      transform-box: fill-box;
+      transform-origin: 100% 0%;
+      animation: swordStrikeMain 0.32s cubic-bezier(0.12, 0.92, 0.24, 1) 0.24s forwards;
+    }
+
+    .x-blade-sub {
+      opacity: 0;
+      transform-box: fill-box;
+      transform-origin: 0% 100%;
+      animation: swordStrikeSub 0.32s cubic-bezier(0.12, 0.92, 0.24, 1) 0.29s forwards;
+    }
+
+    .x-slash-flash {
+      opacity: 0;
+      pointer-events: none;
+      animation: slashFlashGlint 0.45s ease-out 0.26s forwards;
+    }
+
+    @keyframes xFrameAppear {
+      0% { opacity: 0; transform: scale(0.72); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes swordStrikeMain {
+      0% {
+        opacity: 0;
+        transform: translate(110px, -110px) scale(0.25);
+        filter: drop-shadow(0 0 30px #ffffff);
+      }
+      45% {
+        opacity: 1;
+        filter: drop-shadow(0 0 28px #ffffff);
+      }
+      100% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.7));
+      }
+    }
+
+    @keyframes swordStrikeSub {
+      0% {
+        opacity: 0;
+        transform: translate(-90px, 90px) scale(0.25);
+        filter: drop-shadow(0 0 25px #ffffff);
+      }
+      50% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+      }
+    }
+
+    @keyframes xSplitTopLeft {
+      0% { transform: translate(0, 0); }
+      45% { transform: translate(-4px, -4px); }
+      100% { transform: translate(-1.5px, -1.5px); }
+    }
+
+    @keyframes xSplitBottomRight {
+      0% { transform: translate(0, 0); }
+      45% { transform: translate(4px, 4px); }
+      100% { transform: translate(1.5px, 1.5px); }
+    }
+
+    @keyframes slashFlashGlint {
+      0% { opacity: 0; stroke-width: 1; }
+      35% { opacity: 1; stroke-width: 14; filter: blur(2px) drop-shadow(0 0 25px #ffffff); }
+      100% { opacity: 0; stroke-width: 0; }
+    }
+
+    @keyframes xImpactShake {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(-3px, 2px) scale(1.04); }
+      50% { transform: translate(3px, -2px) scale(1.02); }
+      75% { transform: translate(-1.5px, -1px) scale(1.01); }
+    }
+
+    @keyframes logoGlowPulse {
+      0% { transform: scale(1); filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.3)); }
+      100% { transform: scale(1.04); filter: drop-shadow(0 0 26px rgba(255, 255, 255, 0.78)); }
+    }
+
+    .splash-title {
+      font-size: 25px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #ffffff;
+      margin: 0;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: textFadeUp 0.5s ease-out 0.3s forwards;
+    }
+
+    .splash-bar {
+      width: 120px;
+      height: 2.5px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 99px;
+      overflow: hidden;
+      position: relative;
+      opacity: 0;
+      animation: textFadeUp 0.5s ease-out 0.4s forwards;
+    }
+
+    .splash-bar::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -50%;
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, #a3a3a3, #ffffff, transparent);
+      border-radius: 99px;
+      animation: splashBarSlide 1s ease-in-out infinite;
+    }
+
+    .splash-sub {
+      color: #888888;
+      font-size: 11.5px;
+      letter-spacing: 0.5px;
+      opacity: 0;
+      animation: textFadeUp 0.5s ease-out 0.5s forwards;
+    }
+
+    @keyframes textFadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes splashBarSlide {
+      0% { left: -50%; }
+      100% { left: 100%; }
+    }
+
+    /* =========================================
+       Home Screen Launch Transition
+       ========================================= */
+    .app {
+      display: block;
+      min-height: 100dvh;
+      opacity: 0;
+      transform: scale(0.98);
+      transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .app.app-launched {
+      opacity: 1;
+      transform: none;
+    }
+
+    .line-icon {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .main {
+      min-width: 0;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 0 14px calc(114px + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Sticky Search Bar + Admin Analytics Button */
+    .sticky-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: var(--bg);
+      padding: 10px 0 8px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .search-wrap {
+      flex: 1;
+      min-width: 0;
+      position: relative;
+      margin: 0;
+    }
+
+    #search {
+      width: 100%;
+      height: 46px;
+      padding: 0 44px 0 16px;
+      background: #121212;
+      color: var(--text);
+      border: 1px solid #222222;
+      border-radius: 14px;
+      outline: none;
+      font-size: 13.5px;
+      transition: border-color .15s, background .15s;
+    }
+
+    #search:focus {
+      border-color: #484848;
+      background: #151515;
+    }
+
+    #search::placeholder { color: #787878; }
+
+    .search-icon {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #888888;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+    }
+
+    .admin-top-btn {
+      height: 46px;
+      padding: 0 13px;
+      border-radius: 14px;
+      border: 1px solid #332024;
+      background: #140d0f;
+      color: #e5e5e5;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+      transition: background .15s, transform .12s;
+    }
+
+    .admin-top-btn:hover { background: #1f1216; }
+    .admin-top-btn:active { transform: scale(0.95); }
+
+    .content { margin: 6px auto 0; }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-family: "Koh Santepheap", "Kantumruy Pro", serif;
+      font-size: 15.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #ffffff;
+    }
+
+    .slider-head-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .slider-sub {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .slider-nav-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .slider-nav-btn {
+      width: 27px;
+      height: 27px;
+      border-radius: 8px;
+      border: 1px solid #262626;
+      background: #111111;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background .15s, transform .12s;
+    }
+
+    .slider-nav-btn:hover { background: var(--panel-hover); }
+    .slider-nav-btn:active { transform: scale(.92); }
+
+    .slider-nav-btn svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    #count {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* Bottom Category Filter Menu */
+    .nav-filter-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .category-filter-panel {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 14px);
+      transform: translateX(-50%);
+      z-index: 80;
+      padding: 7px;
+      background: rgba(15, 15, 15, 0.98);
+      border: 1px solid #303030;
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.75);
+      animation: filterPanelIn .16s ease-out;
+    }
+
+    .category-filter-panel::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -6px;
+      width: 10px;
+      height: 10px;
+      background: #0f0f0f;
+      border-right: 1px solid #303030;
+      border-bottom: 1px solid #303030;
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    @keyframes filterPanelIn {
+      from { opacity: 0; translate: 0 5px; }
+      to { opacity: 1; translate: 0 0; }
+    }
+
+    .category-filter-panel .category-filter {
+      position: relative;
+      z-index: 1;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 3px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      min-width: 132px;
+    }
+
+    .category-filter {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 3px;
+      min-width: 150px;
+      max-width: min(70vw, 260px);
+      max-height: min(55vh, 360px);
+      overflow-y: auto;
+    }
+
+    .category-filter button {
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      background: transparent;
+      color: #929292;
+      font-size: 12px;
+      line-height: 1.35;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background .18s ease, color .18s ease;
+    }
+
+    .category-filter button.active {
+      background: #292929;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    /* Sliders & 3-Column Drama Grid */
+    .slider-block { margin-bottom: 24px; }
+
+    .recommended-block {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid #1c1c1c;
+    }
+
+    .slider-track {
+      --slide-gap: 8px;
+      display: flex;
+      gap: var(--slide-gap);
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x pan-y;
+      cursor: grab;
+      user-select: none;
+      padding-bottom: 2px;
+    }
+
+    .slider-track.is-dragging {
+      scroll-snap-type: none;
+      scroll-behavior: auto;
+      cursor: grabbing;
+    }
+
+    .slider-track::-webkit-scrollbar { display: none; }
+
+    .slider-track .card {
+      flex: 0 0 calc((100% - (var(--slide-gap) * 2)) / 3);
+      max-width: calc((100% - (var(--slide-gap) * 2)) / 3);
+      scroll-snap-align: start;
+      border-radius: 13px;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .slider-track .cover {
+      pointer-events: none;
+      -webkit-user-drag: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .card {
+      min-width: 0;
+      overflow: hidden;
+      padding: 0;
+      text-align: left;
+      color: var(--text);
+      background: #050505;
+      border: 1px solid #222222;
+      border-radius: 13px;
+      transition: background .15s, transform .15s, opacity .15s;
+    }
+
+    .card:hover { background: #121212; }
+    .card:active { transform: scale(.985); }
+    .card:disabled { opacity: 0.6; cursor: wait; }
+
+    .cover-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      background: #121212;
+      overflow: hidden;
+    }
+
+    .cover-wrap::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.68) 0%,
+        rgba(0, 0, 0, 0.16) 32%,
+        rgba(0, 0, 0, 0) 60%
+      );
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .spinner-ring {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 28px;
+      height: 28px;
+      border: 2.5px solid rgba(255, 255, 255, 0.14);
+      border-top-color: #888888;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      z-index: 1;
+    }
+
+    .btn-mini-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .cover {
+      position: relative;
+      z-index: 2;
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transform: scale(1.025);
+      transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.44s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .cover.loaded {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .cover-play-icon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30px;
+      height: 30px;
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      z-index: 4;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.75));
+      transition: opacity 0.25s ease, transform 0.2s ease;
+    }
+
+    .cover-wrap.is-ready .cover-play-icon { opacity: 0.88; }
+
+    .card:hover .cover-play-icon,
+    .card:active .cover-play-icon {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.08);
+    }
+
+    .cover-play-icon svg {
+      width: 30px;
+      height: 30px;
+      stroke: #ffffff;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      display: block;
+    }
+
+    .cover-views {
+      position: absolute;
+      left: 7px;
+      bottom: 6px;
+      z-index: 4;
+      display: inline-flex;
+      align-items: center;
+      gap: 3.5px;
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      font-size: 10.5px;
+      font-weight: 500;
+      line-height: 1;
+      pointer-events: none;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95);
+      opacity: 0.95;
+    }
+
+    .cover-views svg {
+      width: 12.5px;
+      height: 12.5px;
+      stroke: #ffffff;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      flex-shrink: 0;
+      display: block;
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.85));
+    }
+
+    .cover-duration {
+      position: absolute;
+      right: 6px;
+      bottom: 5px;
+      z-index: 4;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 5.5px;
+      border-radius: 5px;
+      background: rgba(0, 0, 0, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 9.5px;
+      font-weight: 600;
+      line-height: 1.1;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .card-body { padding: 7px 7px 8px; }
+
+    .card-title {
+      font-family: "Koh Santepheap", "Kantumruy Pro", serif;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.45;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+
+    .card-meta {
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 9.5px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .card-code-tag {
+      color: #d4d4d4;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 9.5px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .card-date-tag {
+      color: #7d7d7d;
+      font-size: 9px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status {
+      grid-column: 1 / -1;
+      padding: 42px 15px;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .page-spinner {
+      width: 38px;
+      height: 38px;
+      border: 3px solid rgba(255, 255, 255, 0.14);
+      border-top-color: #888888;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .retry {
+      margin-top: 6px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 10px 16px;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 15px;
+      padding: 25px 0 20px;
+    }
+
+    .page-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 9px 15px;
+      border-radius: 10px;
+    }
+
+    .page-btn:disabled { opacity: .35; cursor: default; }
+    #page-label { color: var(--muted); font-size: 12px; }
+
+    /* =========================================
+       Floating Pill Bottom Tab Bar
+       ========================================= */
+    .bottom-fade-mask {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: calc(96px + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(to top, rgba(0,0,0,0.98) 18%, rgba(0,0,0,0.72) 60%, rgba(0,0,0,0) 100%);
+      pointer-events: none;
+      z-index: 45;
+      transform: translate3d(0, 0, 0);
+    }
+
+    .bottom-nav {
+      position: fixed;
+      left: 50%;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      transform: translate3d(-50%, 0, 0);
+      z-index: 50;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 6px 10px;
+      background: rgba(5, 5, 5, 0.94);
+      border: 1px solid #222222;
+      border-radius: 9999px;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.85);
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .nav-item {
+      position: relative;
+      width: 50px;
+      height: 44px;
+      border-radius: 9999px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #8c8c8c;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      flex-shrink: 0;
+      touch-action: manipulation;
+      transition: background 0.25s ease, color 0.22s ease, border-color 0.25s ease, transform 0.18s ease;
+    }
+
+    .nav-item:hover { color: #d4d4d4; }
+    .nav-item:active { transform: scale(0.9); }
+    .nav-item.active {
+      background: #1a1a1a;
+      border-color: #2e2e2e;
+      color: #ffffff;
+    }
+
+    .nav-item svg {
+      width: 21px;
+      height: 21px;
+      stroke: currentColor;
+      stroke-width: 1.85;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    /* =========================================
+       Detail View + Album (3 Photos) + Episode Cover Cards
+       ========================================= */
+    .hidden { display: none !important; }
+    .detail-view { padding-bottom: calc(36px + env(safe-area-inset-bottom, 0px)); }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 10px 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .back-btn:active { transform: scale(.98); }
+
+    .detail-hero {
+      display: flex;
+      gap: 14px;
+      background: #050505;
+      border: 1px solid #262626;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 18px;
+      align-items: flex-start;
+    }
+
+    .detail-cover-wrap {
+      position: relative;
+      width: 138px;
+      aspect-ratio: 3 / 4;
+      border-radius: 10px;
+      background: #111111;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .detail-cover,
+    .detail-gif-video {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transform: scale(1.025);
+      transition: opacity 0.38s ease, transform 0.42s ease;
+    }
+
+    .detail-cover.loaded,
+    .detail-gif-video.loaded {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .detail-info {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .detail-title {
+      margin: 0 0 6px;
+      font-family: "Koh Santepheap", "Kantumruy Pro", serif;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .detail-meta-badges {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .detail-code-views-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 6px;
+      max-width: 100%;
+    }
+
+    .detail-code-below-wrap {
+      display: flex;
+      align-items: center;
+      margin-top: 2px;
+    }
+
+    .code-copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: #121212;
+      border: 1px solid #2a2a2a;
+      color: #f2f2f2;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px;
+      font-weight: 600;
+      transition: background .15s, border-color .15s, transform .12s;
+    }
+
+    .code-copy-btn:hover {
+      background: #202020;
+      border-color: #444444;
+    }
+
+    .code-copy-btn:active { transform: scale(0.95); }
+
+    .code-copy-btn svg {
+      width: 12px;
+      height: 12px;
+      stroke: #a3a3a3;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .upload-date-pill,
+    .duration-info-pill,
+    .views-info-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4.5px;
+      padding: 3px 8px;
+      border-radius: 7px;
+      background: #0d0d0d;
+      border: 1px solid #222222;
+      color: #9e9e9e;
+      font-size: 10.5px;
+    }
+
+    .views-info-pill {
+      color: #e5e5e5;
+      border-color: #2a2a2a;
+      font-weight: 600;
+    }
+
+    .views-info-pill svg {
+      width: 13px;
+      height: 13px;
+      stroke: #d4d4d4;
+      stroke-width: 1.9;
+      fill: none;
+      flex-shrink: 0;
+    }
+
+    .duration-info-pill {
+      color: #e4e4e4;
+      border-color: #2e2e2e;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .detail-sub {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 18px;
+      margin-bottom: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .detail-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 6px;
+      min-height: 38px;
+      margin-bottom: 8px;
+    }
+
+    .continue-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border: 1px solid #333333;
+      background: #000000;
+      color: #ffffff;
+      height: 38px;
+      padding: 0 11px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 12px;
+      white-space: nowrap;
+      flex: 1 1 auto;
+      min-width: 0;
+      transition: transform .12s, background .15s, opacity .15s;
+    }
+
+    .continue-btn:active { transform: scale(.97); }
+    .continue-btn:disabled { opacity: 0.7; cursor: wait; }
+
+    .fav-btn {
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border-radius: 10px;
+      border: 1px solid #262626;
+      background: #0d0d0d;
+      color: #bdbdbd;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: transform .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .fav-btn svg {
+      width: 19px;
+      height: 19px;
+      stroke: #9e9e9e;
+      stroke-width: 1.9;
+      fill: transparent;
+      transition: stroke .2s ease, fill .2s ease, transform .2s ease;
+    }
+
+    .fav-btn:hover {
+      border-color: #3d3d3d;
+      color: #ffffff;
+    }
+
+    .fav-btn:hover svg { stroke: #d4d4d4; }
+    .fav-btn:active { transform: scale(.92); }
+
+    .fav-btn.active {
+      border-color: #525252;
+      background: #171717;
+      color: #ffffff;
+    }
+
+    .fav-btn.active svg {
+      stroke: #ffffff;
+      fill: #ffffff;
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35));
+    }
+
+    .admin-trending-btn {
+      height: 34px;
+      padding: 0 10px;
+      border-radius: 9px;
+      border: 1px solid #2e2e2e;
+      background: #141414;
+      color: #a3a3a3;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all .15s ease;
+    }
+
+    .admin-trending-btn.active {
+      border-color: rgba(212, 212, 212, 0.5);
+      background: rgba(212, 212, 212, 0.12);
+      color: #d4d4d4;
+    }
+
+    .detail-synopsis-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: rgba(212, 212, 212, 0.05);
+      border: 1px solid rgba(212, 212, 212, 0.2);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: #e5e5e5;
+      font-size: 12px;
+      line-height: 1.55;
+      margin: 0 0 18px 0;
+    }
+
+    .detail-synopsis-notice svg {
+      width: 15px;
+      height: 15px;
+      stroke: #d4d4d4;
+      stroke-width: 2;
+      fill: none;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .detail-synopsis-notice strong {
+      color: #d4d4d4;
+      font-weight: 700;
+    }
+
+    /* Album Section (3 Photos) */
+    .album-section {
+      margin-bottom: 20px;
+      background: #050505;
+      border: 1px solid #222222;
+      border-radius: 15px;
+      padding: 12px;
+    }
+
+    .album-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .album-card {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      border-radius: 10px;
+      background: #121212;
+      border: 1px solid #262626;
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .14s ease, border-color .15s ease;
+    }
+
+    .album-card:hover { border-color: #3f3f3f; }
+    .album-card:active { transform: scale(0.97); }
+
+    .album-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .album-card img.loaded { opacity: 1; }
+
+    /* Episode Cover Cards */
+    .ep-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .ep-card-wrap {
+      position: relative;
+      min-width: 0;
+    }
+
+    .ep-card {
+      width: 100%;
+      padding: 0;
+      border: 1px solid #242424;
+      background: #0d0d0d;
+      color: var(--text);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      text-align: center;
+      transition: transform .12s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .ep-card:hover {
+      background: #151515;
+      border-color: #383838;
+    }
+
+    .ep-card:active { transform: scale(0.96); }
+
+    .ep-card.current {
+      border-color: #a3a3a3;
+      box-shadow: 0 0 0 1px rgba(163, 163, 163, 0.35);
+    }
+
+    .ep-card:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .ep-thumb-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      background: #141414;
+      overflow: hidden;
+    }
+
+    .ep-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      opacity: 0;
+      transition: opacity 0.32s ease;
+    }
+
+    .ep-thumb.loaded { opacity: 1; }
+
+    .ep-play-mini {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.52);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    .ep-play-mini svg {
+      width: 11px;
+      height: 11px;
+      stroke: #ffffff;
+      stroke-width: 2;
+      fill: #ffffff;
+      margin-left: 1px;
+    }
+
+    .ep-num-bar {
+      padding: 5.5px 4px;
+      background: #0a0a0a;
+      border-top: 1px solid #1c1c1c;
+      font-size: 11px;
+      font-weight: 700;
+      color: #f2f2f2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ep-card.current .ep-num-bar {
+      background: rgba(163, 163, 163, 0.16);
+      color: #e5e5e5;
+    }
+
+    .latest-dot {
+      display: inline-block;
+      width: 5.5px;
+      height: 5.5px;
+      border-radius: 50%;
+      background: #a3a3a3;
+      box-shadow: 0 0 6px rgba(163, 163, 163, 0.9);
+      animation: latestBlink 1.2s ease-in-out infinite;
+    }
+
+    @keyframes latestBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .25; }
+    }
+
+    /* Vote Star + Admin Request Card */
+    .notice-feedback-card {
+      margin-top: 18px;
+      background: #040404;
+      border: 1px solid #242424;
+      border-radius: 15px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+    }
+
+    .vote-star-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 4px 2px 12px;
+      border-bottom: 1px solid #1b1b1b;
+    }
+
+    .vote-label-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .vote-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .vote-meta {
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+
+    .star-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .star-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      border: 1px solid #242424;
+      background: #121212;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .14s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .star-btn:active { transform: scale(0.86); }
+
+    .star-btn svg {
+      width: 19px;
+      height: 19px;
+      stroke: #525252;
+      stroke-width: 1.85;
+      fill: transparent;
+      transition: stroke .18s ease, fill .18s ease;
+    }
+
+    .star-btn.active {
+      border-color: rgba(212, 212, 212, 0.45);
+      background: rgba(212, 212, 212, 0.08);
+    }
+
+    .star-btn.active svg {
+      stroke: var(--gold);
+      fill: var(--gold);
+      filter: drop-shadow(0 0 5px rgba(212, 212, 212, 0.35));
+    }
+
+    .request-box {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .request-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .request-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .admin-group-link {
+      font-size: 11.5px;
+      color: #d4d4d4;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 99px;
+      background: rgba(212, 212, 212, 0.12);
+      border: 1px solid rgba(212, 212, 212, 0.28);
+    }
+
+    .request-input {
+      width: 100%;
+      min-height: 68px;
+      max-height: 150px;
+      resize: vertical;
+      background: #111111;
+      color: var(--text);
+      border: 1px solid #262626;
+      border-radius: 11px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      outline: none;
+      transition: border-color .15s, opacity .15s;
+    }
+
+    .request-input:focus { border-color: #4d4d4d; }
+    .request-input::placeholder { color: #737373; }
+    .request-input:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      background: #0d0d0d;
+    }
+
+    .request-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .request-status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+      line-height: 1.45;
+    }
+
+    .request-send-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      background: #1e1e1e;
+      color: #ffffff;
+      border: 1px solid #3a3a3a;
+      border-radius: 10px;
+      padding: 8px 15px;
+      font-size: 12.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background .15s, transform .12s, opacity .15s;
+    }
+
+    .request-send-btn:hover { background: #292929; }
+    .request-send-btn:active { transform: scale(0.96); }
+    .request-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Admin-Only Analytics Modal & Lightbox Modal */
+    .admin-modal-backdrop,
+    .lightbox-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: rgba(0, 0, 0, 0.86);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .lightbox-img {
+      max-width: 94vw;
+      max-height: 86vh;
+      border-radius: 14px;
+      border: 1px solid #333333;
+      object-fit: contain;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
+    }
+
+    .admin-modal {
+      width: 100%;
+      max-width: 440px;
+      background: #101010;
+      border: 1px solid #2b2b2b;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.85);
+    }
+
+    .admin-modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #222222;
+    }
+
+    .admin-modal-head h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .admin-close-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
+      background: #181818;
+      color: #cccccc;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+      margin-bottom: 14px;
+    }
+
+    .stat-card {
+      background: #161616;
+      border: 1px solid #252525;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .stat-val {
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .notif-stat-box {
+      background: #141414;
+      border: 1px solid #252525;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.65;
+      color: #d4d4d4;
+    }
+
+    .copy-toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(20, 20, 20, 0.96);
+      border: 1px solid #383838;
+      color: #ffffff;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 600;
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+
+    .copy-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (min-width: 720px) {
+      .main { max-width: 880px; padding: 0 22px calc(120px + env(safe-area-inset-bottom, 0px)); }
+      .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+      .ep-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+      .slider-track { --slide-gap: 14px; }
+      .detail-cover-wrap { width: 165px; }
+    }
+  </style>
+</head>
+
+<body>
+<!-- Splash Screen -->
+<div id="app-splash" class="app-splash">
+  <div class="splash-bg-glow"></div>
+  <div class="splash-content">
+    <svg class="splash-logo-svg" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="χƒαη 18 קɭυѕ Logo">
+      <!-- ផ្នែកខាងលើ-ឆ្វេង នៃអក្សរ X (ដូចរូបភាពដើម ១០០%) -->
+      <g class="x-frame-top">
+        <polygon fill="#ffffff" points="193,244 211,244 363,399 351,411"/>
+        <polygon fill="#ffffff" points="231,244 295,244 401,351 391,361 290,256"/>
+        <polygon fill="#ffffff" points="507,244 371,393 364,381"/>
+      </g>
+
+      <!-- ផ្នែកខាងក្រោម-ស្ដាំ នៃអក្សរ X (ដូចរូបភាពដើម ១០០%) -->
+      <g class="x-frame-bottom">
+        <polygon fill="#ffffff" points="411,437 510,545 574,557 505,557 401,447"/>
+        <polygon fill="#ffffff" points="295,557 429,406 438,418"/>
+      </g>
+
+      <!-- ផ្លែដាវកាប់កាត់ទទឹងទី ១ (វែងពីលើស្ដាំ ចុះក្រោមឆ្វេង) -->
+      <polygon class="x-blade-main" fill="#ffffff" points="673,178 363,399 127,623 351,411"/>
+
+      <!-- ផ្លែដាវកាប់កាត់ទទឹងទី ២ (ផ្នែកខាងស្ដាំ និងជ្រុងក្រោមស្ដាំ) -->
+      <polygon class="x-blade-sub" fill="#ffffff" points="622,231 453,400 607,557 589,557 437,400"/>
+
+      <!-- ពន្លឺផ្លេកដាវពេលកាប់ (Slash Glint Effect) -->
+      <line class="x-slash-flash" x1="685" y1="166" x2="115" y2="635" stroke="#ffffff" stroke-linecap="round"/>
+    </svg>
+    <h1 class="splash-title">χƒαη 18 קɭυѕ</h1>
+    <div class="splash-bar"></div>
+    <div class="splash-sub">កំពុងបើកដំណើរការកម្មវិធី...</div>
+  </div>
+</div>
+
+<div id="copy-toast" class="copy-toast">បានចម្លង CODE រួចរាល់!</div>
+
+<!-- Album Lightbox Modal -->
+<div id="album-lightbox" class="lightbox-backdrop hidden">
+  <img id="album-lightbox-img" class="lightbox-img" src="" alt="Album Photo">
+</div>
+
+<!-- Admin Analytics Modal -->
+<div id="admin-analytics-modal" class="admin-modal-backdrop hidden">
+  <div class="admin-modal">
+    <div class="admin-modal-head">
+      <h3>
+        <svg class="line-icon" viewBox="0 0 24 24">
+          <line x1="18" y1="20" x2="18" y2="10"></line>
+          <line x1="12" y1="20" x2="12" y2="4"></line>
+          <line x1="6" y1="20" x2="6" y2="14"></line>
+        </svg>
+        <span>ស្ថិតិអ្នកប្រើប្រាស់ (Admin Only)</span>
+      </h3>
+      <button type="button" id="close-admin-modal" class="admin-close-btn" aria-label="Close">✕</button>
+    </div>
+    <div id="admin-analytics-body">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">អ្នកប្រើសរុប (/start)</div>
+          <div class="stat-val" id="stat-total-users">...</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">អ្នកប្រើថ្មីថ្ងៃនេះ</div>
+          <div class="stat-val" id="stat-new-today">...</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">អ្នកប្រើថ្មី (៧ថ្ងៃ)</div>
+          <div class="stat-val" id="stat-new-7d">...</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">សកម្មថ្ងៃនេះ</div>
+          <div class="stat-val" id="stat-active-today">...</div>
+        </div>
+      </div>
+      <div class="notif-stat-box" id="stat-notif-box">
+        កំពុងទាញយកស្ថិតិ Notification...
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app-root">
+  <main class="main">
+    <!-- Top Search Bar + Admin Only Button -->
+    <div class="sticky-header">
+      <div class="topbar">
+        <div class="search-wrap">
+          <input id="search" type="search" placeholder="ស្វែងរកឈ្មោះរឿង, CODE (XF-000001), ប្រភេទ..." autocomplete="off">
+          <span class="search-icon">
+            <svg class="line-icon" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="20" y1="20" x2="16.35" y2="16.35"></line>
+            </svg>
+          </span>
+        </div>
+        <button type="button" id="admin-stats-btn" class="admin-top-btn hidden" title="ស្ថិតិអ្នកប្រើប្រាស់ (Admin Only)">
+          <svg class="line-icon" viewBox="0 0 24 24" style="width:16px;height:16px;">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>ស្ថិតិ</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- List View -->
+      <section id="list-view">
+
+        <!-- ប្លុក Top trending ខាងក្រោមរឿងមកដល់ថ្មី (ជ្រើសរើសដោយ Admin ផ្ទាល់) -->
+        <div id="top-trending-block" class="slider-block hidden">
+          <div class="section-head">
+            <h2>
+              <svg class="line-icon" viewBox="0 0 24 24" style="stroke:#d4d4d4;">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+              <span>Top trending</span>
+            </h2>
+            <div class="slider-head-right">
+              <span class="slider-sub" id="top-trending-count"></span>
+              <div class="slider-nav-group">
+                <button type="button" class="slider-nav-btn" id="trend-prev-btn" aria-label="Previous">
+                  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <button type="button" class="slider-nav-btn" id="trend-next-btn" aria-label="Next">
+                  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="top-trending-track" class="slider-track"></div>
+        </div>
+
+        <!-- ប្លុក រឿងពេញនិយម (បង្ហាញតែនៅទំព័រទី ១) -->
+        <div id="popular-block" class="slider-block hidden">
+          <div class="section-head">
+            <h2>
+              <svg class="line-icon" viewBox="0 0 24 24">
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
+              </svg>
+              <span>រឿងពេញនិយម</span>
+            </h2>
+            <div class="slider-head-right">
+              <span class="slider-sub" id="popular-count"></span>
+              <div class="slider-nav-group">
+                <button type="button" class="slider-nav-btn" id="pop-prev-btn" aria-label="Previous">
+                  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <button type="button" class="slider-nav-btn" id="pop-next-btn" aria-label="Next">
+                  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="popular-track" class="slider-track"></div>
+        </div>
+
+        <div class="section-head">
+          <h2 id="section-title">រឿងទាំងអស់</h2>
+          <div class="slider-head-right">
+            <span id="count">កំពុងផ្ទុក...</span>
+          </div>
+        </div>
+
+        <div id="drama-container" class="grid">
+          <div class="status">
+            <div class="page-spinner"></div>
+            <div>កំពុងទាញយកបញ្ជីរឿង...</div>
+          </div>
+        </div>
+
+        <div class="pagination">
+          <button class="page-btn" id="prev" disabled>
+            <svg class="line-icon" viewBox="0 0 24 24" style="width:15px;height:15px;">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            <span>មុន</span>
+          </button>
+          <span id="page-label">ទំព័រ 1</span>
+          <button class="page-btn" id="next" disabled>
+            <span>បន្ទាប់</span>
+            <svg class="line-icon" viewBox="0 0 24 24" style="width:15px;height:15px;">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- Detail View -->
+      <section id="detail-view" class="detail-view hidden">
+        <button type="button" class="back-btn" id="back-to-list">
+          <svg class="line-icon" viewBox="0 0 24 24" style="width:16px;height:16px;">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>ត្រឡប់</span>
+        </button>
+
+        <div class="detail-hero">
+          <div class="detail-cover-wrap" id="detail-cover-wrap">
+            <div class="spinner-ring" id="detail-spinner"></div>
+            <img id="detail-cover" class="detail-cover" alt="">
+            <video id="detail-gif-video" class="detail-gif-video hidden" autoplay loop muted playsinline></video>
+          </div>
+          <div class="detail-info">
+            <h2 id="detail-title" class="detail-title"></h2>
+
+            <div class="detail-meta-badges">
+              <div class="detail-code-views-row">
+                <span id="detail-views-pill" class="views-info-pill" title="ចំនួនអ្នកមើល">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <span id="detail-views-text">0</span>
+                </span>
+                <span id="detail-duration-pill" class="duration-info-pill hidden"></span>
+              </div>
+              <span id="detail-date-pill" class="upload-date-pill hidden"></span>
+            </div>
+
+            <div id="detail-sub" class="detail-sub">កំពុងផ្ទុកភាគ...</div>
+
+            <div class="detail-actions">
+              <button type="button" id="continue-btn" class="continue-btn" disabled>
+                <span class="btn-mini-spinner"></span>
+                <span>កំពុងផ្ទុក...</span>
+              </button>
+              <button type="button" id="fav-btn" class="fav-btn" aria-label="Save Drama" title="រក្សាទុករឿងនេះ (Save)">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+                </svg>
+              </button>
+            </div>
+
+            <div class="detail-code-below-wrap">
+              <button type="button" id="detail-code-btn" class="code-copy-btn hidden" title="ចុចដើម្បីចម្លង CODE">
+                <span id="detail-code-text">XF-000001</span>
+                <svg viewBox="0 0 24 24">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ប្លុក ចំណាំ នៅខាងក្រោម Detail Hero និងខាងលើរូប Album -->
+        <div id="detail-synopsis" class="detail-synopsis-notice">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <div>
+            <strong>ចំណាំ ៖</strong> នៅពេលអ្នកចុចមើលរឿង វីដេអូនឹងផ្ញើទៅ Chat Bot Telegram ស្វ័យប្រវត្តិ
+          </div>
+        </div>
+
+        <!-- ប្លុក រូប Album (៣ រូប) នៅលើប្លុកជ្រើសរើសភាគ (បង្ហាញតែពេលមានរូប Album) -->
+        <div id="album-section" class="album-section hidden">
+          <div class="section-head" style="margin-bottom:10px;">
+            <h2>
+              <svg class="line-icon" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+              <span>រូប Album</span>
+            </h2>
+            <span class="slider-sub" id="album-count-label"></span>
+          </div>
+          <div id="album-container" class="album-grid"></div>
+        </div>
+
+        <!-- ប្លុក ជ្រើសរើសភាគ (បង្ហាញតែពេលរឿងមានចាប់ពី ២ ភាគឡើងទៅ) -->
+        <div id="episodes-section" class="hidden">
+          <div class="section-head">
+            <h2>ជ្រើសរើសភាគ</h2>
+            <span id="ep-count"></span>
+          </div>
+
+          <div id="episodes-container" class="ep-grid"></div>
+        </div>
+
+        <!-- Admin Request -->
+        <div class="notice-feedback-card">
+          <div class="request-box">
+            <div class="request-head">
+              <span class="request-title">ស្នើសុំផ្សេងៗទៅកាន់ Admin (១ថ្ងៃ/១ដង)</span>
+              <a href="https://t.me/+bu9JNK94p8w5NDE1" target="_blank" rel="noopener noreferrer" class="admin-group-link">
+                <span>គ្រុប Admin</span>
+                <svg class="line-icon" viewBox="0 0 24 24" style="width:12px;height:12px;">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </a>
+            </div>
+            <textarea id="user-request-input" class="request-input" rows="2" maxlength="600" placeholder="សរសេរសំណើសុំរឿងថ្មី ឬរាយការណ៍បញ្ហាផ្សេងៗទៅកាន់ Admin..."></textarea>
+            <div class="request-actions">
+              <span id="request-status-msg" class="request-status"></span>
+              <button type="button" id="send-request-btn" class="request-send-btn">
+                <svg class="line-icon" viewBox="0 0 24 24" style="width:15px;height:15px;">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+                <span>ផ្ញើទៅ Admin</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recommended Dramas Slider -->
+        <div id="recommended-block" class="slider-block recommended-block hidden">
+          <div class="section-head">
+            <h2>
+              <svg class="line-icon" viewBox="0 0 24 24">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+              <span>រឿងណែនាំ</span>
+            </h2>
+            <div class="slider-head-right">
+              <span class="slider-sub" id="recommended-sub"></span>
+              <div class="slider-nav-group">
+                <button type="button" class="slider-nav-btn" id="rec-prev-btn" aria-label="Previous">
+                  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <button type="button" class="slider-nav-btn" id="rec-next-btn" aria-label="Next">
+                  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="recommended-track" class="slider-track"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Bottom Navigation Bar with Category Filter Menu -->
+<div class="bottom-fade-mask"></div>
+<nav class="bottom-nav" aria-label="Bottom Navigation">
+  <button type="button" class="nav-item side-btn active" id="home-btn" title="ទំព័រដើម" aria-label="ទំព័រដើម">
+    <svg viewBox="0 0 24 24">
+      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1V9.5z"></path>
+    </svg>
+  </button>
+  <button type="button" class="nav-item side-btn" id="focus-search" title="ស្វែងរករឿង" aria-label="ស្វែងរករឿង">
+    <svg viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7"></circle>
+      <line x1="20" y1="20" x2="16.35" y2="16.35"></line>
+    </svg>
+  </button>
+  <button type="button" class="nav-item side-btn" id="favorites-btn" title="រឿងរក្សាទុក" aria-label="រឿងរក្សាទុក">
+    <svg viewBox="0 0 24 24">
+      <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+    </svg>
+  </button>
+  <button type="button" class="nav-item side-btn" id="history-btn" title="រឿងធ្លាប់មើល" aria-label="រឿងធ្លាប់មើល">
+    <svg viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"></circle>
+      <polyline points="12 7 12 12 15.5 14"></polyline>
+    </svg>
+  </button>
+  <div class="nav-filter-wrap" id="nav-filter-wrap">
+    <button type="button" class="nav-item" id="category-filter-toggle" title="ប្រភេទរឿង" aria-label="ប្រភេទរឿង" aria-expanded="false" aria-controls="category-filter-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <line x1="4" y1="6" x2="20" y2="6"></line>
+        <circle cx="9" cy="6" r="2.2"></circle>
+        <line x1="4" y1="12" x2="20" y2="12"></line>
+        <circle cx="15" cy="12" r="2.2"></circle>
+        <line x1="4" y1="18" x2="20" y2="18"></line>
+        <circle cx="10" cy="18" r="2.2"></circle>
+      </svg>
+    </button>
+    <div class="category-filter-panel hidden" id="category-filter-panel">
+      <div class="category-filter" id="category-filter" role="group" aria-label="ប្រភេទរឿង"></div>
+    </div>
+  </div>
+</nav>
+
+<script>
+(() => {
+  const API_BASE = window.location.origin && window.location.origin.startsWith("http")
+    ? window.location.origin
+    : "https://kmovie-render.onrender.com";
+  const API_URL = `${API_BASE}/api/dramas`;
+  const PAGE_SIZE = 9;
+  const SLIDER_MAX_ITEMS = 6;
+  const SPLASH_DURATION_MS = 1150;
+  const SPLASH_MAX_TIMEOUT_MS = 2400;
+  const splashMountedAt = performance.now();
+
+  // ប្រើសោរ Cache v2 រួមគ្នាជាមួយ v5 ដើម្បីឱ្យបើកចេញភ្លាមៗដូច HTML ចាស់
+  const COVER_CACHE_NAME = "xfanster-covers-v3";
+  const LEGACY_COVER_CACHE_NAME = "xfanster-covers-v2";
+  if ("caches" in window) {
+    caches.delete(LEGACY_COVER_CACHE_NAME).catch(() => {});
+  }
+  const MANIFEST_STORAGE_KEY = "xfanster_cover_manifest_v2";
+  const UI_STATE_STORAGE_KEY = "xfanster_ui_state_v4";
+  const LOCAL_FAV_STORAGE_KEY = "xfanster_local_favorites_v1";
+  const LOCAL_RATING_STORAGE_KEY = "xfanster_local_ratings_v1";
+  const CATALOG_CACHE_STORAGE_KEY = "xfanster_dramas_catalog_cache_v2";
+  const CATALOG_CACHE_FALLBACK_KEY = "xfanster_dramas_catalog_cache_v5";
+  const DAILY_REQ_LIMIT_STORAGE_KEY = "xfanster_daily_req_date_v1";
+  const SPLASH_SHOWN_SESSION_KEY = "xfanster_splash_shown_session_v1";
+
+  const DEFAULT_REQ_PLACEHOLDER = "សរសេរសំណើសុំរឿងថ្មី ឬរាយការណ៍បញ្ហាផ្សេងៗទៅកាន់ Admin...";
+  const DISABLED_REQ_PLACEHOLDER = "អ្នកបានប្រើសិទ្ធិផ្ញើសំណើ ១ដងក្នុងថ្ងៃនេះរួចហើយ (សូមរង់ចាំថ្ងៃស្អែក)";
+  const SEND_BTN_DEFAULT_HTML = `
+    <svg class="line-icon" viewBox="0 0 24 24" style="width:15px;height:15px;">
+      <line x1="22" y1="2" x2="11" y2="13"></line>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+    </svg>
+    <span>ផ្ញើទៅ Admin</span>
+  `;
+
+  const PLAY_LINE_ICON = `<svg class="line-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
+  const LUCIDE_PLAY_OUTLINE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
+  const LUCIDE_EYE_OUTLINE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+
+  function initTelegramWebApp() {
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      try {
+        tg.ready();
+        tg.expand();
+        tg.setHeaderColor("#000000");
+        tg.setBackgroundColor("#000000");
+        if (typeof tg.setBottomBarColor === "function") {
+          tg.setBottomBarColor("#000000");
+        }
+      } catch (_) {}
+    }
+    return tg;
+  }
+
+  initTelegramWebApp();
+
+  const appSplash = document.getElementById("app-splash");
+  const appRoot = document.getElementById("app-root");
+  const copyToast = document.getElementById("copy-toast");
+  const albumLightbox = document.getElementById("album-lightbox");
+  const albumLightboxImg = document.getElementById("album-lightbox-img");
+
+  const listView = document.getElementById("list-view");
+  const detailView = document.getElementById("detail-view");
+  const container = document.getElementById("drama-container");
+  const sectionTitle = document.getElementById("section-title");
+  const search = document.getElementById("search");
+  const prev = document.getElementById("prev");
+  const next = document.getElementById("next");
+  const pageLabel = document.getElementById("page-label");
+  const countLabel = document.getElementById("count");
+  const categoryFilter = document.getElementById("category-filter");
+  const categoryFilterToggle = document.getElementById("category-filter-toggle");
+  const categoryFilterPanel = document.getElementById("category-filter-panel");
+
+  const adminStatsBtn = document.getElementById("admin-stats-btn");
+  const adminAnalyticsModal = document.getElementById("admin-analytics-modal");
+  const closeAdminModalBtn = document.getElementById("close-admin-modal");
+
+
+  const topTrendingBlock = document.getElementById("top-trending-block");
+  const topTrendingTrack = document.getElementById("top-trending-track");
+  const topTrendingCount = document.getElementById("top-trending-count");
+  const trendPrevBtn = document.getElementById("trend-prev-btn");
+  const trendNextBtn = document.getElementById("trend-next-btn");
+
+  const popularBlock = document.getElementById("popular-block");
+  const popularTrack = document.getElementById("popular-track");
+  const popularCount = document.getElementById("popular-count");
+  const popPrevBtn = document.getElementById("pop-prev-btn");
+  const popNextBtn = document.getElementById("pop-next-btn");
+
+  const backBtn = document.getElementById("back-to-list");
+  const detailCoverWrap = document.getElementById("detail-cover-wrap");
+  const detailCover = document.getElementById("detail-cover");
+  const detailGifVideo = document.getElementById("detail-gif-video");
+  const detailSpinner = document.getElementById("detail-spinner");
+  const detailTitle = document.getElementById("detail-title");
+  const detailCodeBtn = document.getElementById("detail-code-btn");
+  const detailCodeText = document.getElementById("detail-code-text");
+  const detailViewsPill = document.getElementById("detail-views-pill");
+  const detailViewsText = document.getElementById("detail-views-text");
+  const detailDurationPill = document.getElementById("detail-duration-pill");
+  const detailDatePill = document.getElementById("detail-date-pill");
+  const detailSub = document.getElementById("detail-sub");
+  const continueBtn = document.getElementById("continue-btn");
+  const favBtn = document.getElementById("fav-btn");
+  const detailLikeText = document.getElementById("detail-like-text");
+  const adminTrendingBtn = document.getElementById("admin-trending-btn");
+
+  const albumSection = document.getElementById("album-section");
+  const albumContainer = document.getElementById("album-container");
+  const albumCountLabel = document.getElementById("album-count-label");
+
+  const episodesSection = document.getElementById("episodes-section");
+  const epCount = document.getElementById("ep-count");
+  const episodesContainer = document.getElementById("episodes-container");
+
+  const starGroup = document.getElementById("star-group");
+  const voteMetaText = document.getElementById("vote-meta-text");
+  const userRequestInput = document.getElementById("user-request-input");
+  const sendRequestBtn = document.getElementById("send-request-btn");
+  const requestStatusMsg = document.getElementById("request-status-msg");
+
+  const recommendedBlock = document.getElementById("recommended-block");
+  const recommendedTrack = document.getElementById("recommended-track");
+  const recommendedSub = document.getElementById("recommended-sub");
+  const recPrevBtn = document.getElementById("rec-prev-btn");
+  const recNextBtn = document.getElementById("rec-next-btn");
+
+  let allDramas = [];
+  let newestCatalogDramas = [];
+  let topTrendingDramas = [];
+  let serverCategories = [];
+  let isAdminUser = false;
+  let page = 1;
+  let currentCategory = "all";
+  let viewMode = "home";
+  let activeDetailDramaTitle = null;
+  let activeDetailDramaObj = null;
+  let activeDetailRequestSeq = 0;
+  let splashDismissScheduled = false;
+  let toastTimeout = null;
+
+  const memoryBlobUrls = new Map();
+  const sliderTimers = new Map();
+  const sliderPauseControllers = new Map();
+
+  const defaultCategories = [
+    { key: "all", label: "ទាំងអស់" }
+  ];
+
+  // ============================================================================
+  // SPLASH SCREEN CONTROLLER
+  // ============================================================================
+
+  const alreadyShownSplashInSession = (() => {
+    try {
+      return sessionStorage.getItem(SPLASH_SHOWN_SESSION_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  })();
+
+  if (alreadyShownSplashInSession) {
+    appSplash?.classList.add("hide");
+    appRoot?.classList.add("app-launched");
+    splashDismissScheduled = true;
+  } else {
+    setTimeout(() => hideAppSplash(), SPLASH_MAX_TIMEOUT_MS);
+  }
+
+  function hideAppSplash() {
+    if (splashDismissScheduled) return;
+    splashDismissScheduled = true;
+
+    try {
+      sessionStorage.setItem(SPLASH_SHOWN_SESSION_KEY, "1");
+    } catch (_) {}
+
+    const elapsed = performance.now() - splashMountedAt;
+    const waitMs = Math.max(0, SPLASH_DURATION_MS - elapsed);
+
+    setTimeout(() => {
+      appSplash?.classList.add("hide");
+      appRoot?.classList.add("app-launched");
+    }, waitMs);
+  }
+
+  // ============================================================================
+  // LIGHTBOX HELPER FOR ALBUM PHOTOS
+  // ============================================================================
+
+  albumLightbox?.addEventListener("click", () => {
+    albumLightbox.classList.add("hidden");
+    albumLightboxImg.src = "";
+  });
+
+  function openLightbox(imgSrc) {
+    if (!imgSrc || !albumLightbox || !albumLightboxImg) return;
+    albumLightboxImg.src = imgSrc;
+    albumLightbox.classList.remove("hidden");
+  }
+
+  // ============================================================================
+  // COPY CODE HELPER
+  // ============================================================================
+
+  function showCopyToast(text) {
+    if (!copyToast) return;
+    copyToast.textContent = text;
+    copyToast.classList.add("show");
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+      copyToast.classList.remove("show");
+    }, 1800);
+  }
+
+  async function copyDramaCodeToClipboard(codeText) {
+    if (!codeText) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(codeText);
+      } else {
+        const tempInput = document.createElement("input");
+        tempInput.value = codeText;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand("copy");
+        document.body.removeChild(tempInput);
+      }
+      showCopyToast(`បានចម្លងកូដ ${codeText}`);
+    } catch (_) {
+      showCopyToast(`CODE: ${codeText}`);
+    }
+  }
+
+  // ============================================================================
+  // CATEGORY FILTER PANEL TOGGLE
+  // ============================================================================
+
+  function setCategoryFilterPanelOpen(open) {
+    if (!categoryFilterToggle || !categoryFilterPanel) return;
+    categoryFilterPanel.classList.toggle("hidden", !open);
+    categoryFilterToggle.classList.toggle("active", open);
+    categoryFilterToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  categoryFilterToggle?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const isOpen = categoryFilterToggle.getAttribute("aria-expanded") === "true";
+    setCategoryFilterPanelOpen(!isOpen);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#nav-filter-wrap")) setCategoryFilterPanelOpen(false);
+  });
+
+  categoryFilterPanel?.addEventListener("click", (event) => {
+    if (event.target.closest("button[data-cat]")) setCategoryFilterPanelOpen(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setCategoryFilterPanelOpen(false);
+      adminAnalyticsModal?.classList.add("hidden");
+      albumLightbox?.classList.add("hidden");
+    }
+  });
+
+  function getTelegramUserProfile() {
+    const tg = window.Telegram?.WebApp;
+    const u = tg?.initDataUnsafe?.user;
+    if (u && u.id) {
+      return {
+        user_id: Number(u.id),
+        first_name: String(u.first_name || "").trim(),
+        last_name: String(u.last_name || "").trim(),
+        username: String(u.username || "").trim()
+      };
+    }
+    const params = new URLSearchParams(window.location.search);
+    const uid = params.get("user_id");
+    const parsedUid = uid && /^\d+$/.test(uid.trim()) ? Number(uid.trim()) : null;
+    return {
+      user_id: parsedUid,
+      first_name: "",
+      last_name: "",
+      username: ""
+    };
+  }
+
+  function getUserId() {
+    return getTelegramUserProfile().user_id;
+  }
+
+  // ============================================================================
+  // ADMIN ANALYTICS MODAL (VISIBLE ONLY TO ADMIN)
+  // ============================================================================
+
+  async function openAdminAnalyticsModal() {
+    const uid = getUserId();
+    if (!uid) return;
+    adminAnalyticsModal?.classList.remove("hidden");
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/analytics?user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
+        cache: "no-store"
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      document.getElementById("stat-total-users").textContent = `${data.total_users || 0} នាក់`;
+      document.getElementById("stat-new-today").textContent = `+${data.new_users_today || 0} នាក់`;
+      document.getElementById("stat-new-7d").textContent = `+${data.new_users_7d || 0} នាក់`;
+      document.getElementById("stat-active-today").textContent = `${data.active_users_today || 0} នាក់`;
+
+      const ns = data.notif_stats || {};
+      const notifBox = document.getElementById("stat-notif-box");
+      notifBox.innerHTML = `
+        <div><strong>🔔 ស្ថិតិការផ្ញើ Notification (User Bot Chat)៖</strong></div>
+        <div>• ចំនួនដងផ្ញើសរុប៖ <strong>${ns.total_broadcasts || 0} ដង</strong></div>
+        <div>• សារផ្ញើជោគជ័យសរុប៖ <strong>${ns.total_delivered || 0} សារ</strong></div>
+        <div>• រឿងផ្ញើចុងក្រោយ៖ <strong>${ns.last_drama || "មិនទាន់មាន"}</strong></div>
+        <div>• លទ្ធផលចុងក្រោយ៖ ជោគជ័យ <strong>${ns.last_sent_ok || 0}</strong> / បរាជ័យ <strong>${ns.last_failed || 0}</strong></div>
+        <div>• ពេលវេលាចុងក្រោយ៖ <span>${ns.last_time || "មិនទាន់មាន"}</span></div>
+      `;
+    } catch (_) {
+      document.getElementById("stat-notif-box").textContent = "មិនអាចទាញយកស្ថិតិបានទេ។";
+    }
+  }
+
+  adminStatsBtn?.addEventListener("click", openAdminAnalyticsModal);
+  closeAdminModalBtn?.addEventListener("click", () => adminAnalyticsModal?.classList.add("hidden"));
+  adminAnalyticsModal?.addEventListener("click", (e) => {
+    if (e.target === adminAnalyticsModal) adminAnalyticsModal.classList.add("hidden");
+  });
+
+  // ============================================================================
+  // DAILY REQUEST LIMIT (1 DAY / 1 REQUEST IN CAMBODIA TIME UTC+7)
+  // ============================================================================
+
+  function getCambodiaDateString() {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Phnom_Penh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(new Date());
+    } catch (_) {
+      const now = new Date();
+      const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const khDate = new Date(utcMs + (7 * 3600000));
+      return khDate.toISOString().slice(0, 10);
+    }
+  }
+
+  function getUserDailyReqStorageKey() {
+    const uid = getUserId() || "guest";
+    return `${DAILY_REQ_LIMIT_STORAGE_KEY}_${uid}`;
+  }
+
+  function hasSentRequestTodayLocal() {
+    try {
+      const savedDate = localStorage.getItem(getUserDailyReqStorageKey());
+      return savedDate === getCambodiaDateString();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function markRequestSentTodayLocal(serverDateStr = "") {
+    try {
+      const dateStr = serverDateStr || getCambodiaDateString();
+      localStorage.setItem(getUserDailyReqStorageKey(), dateStr);
+    } catch (_) {}
+  }
+
+  function applyDailyRequestLimitUI(alreadySentToday, statusNoticeText = "") {
+    if (alreadySentToday) {
+      userRequestInput.value = "";
+      userRequestInput.disabled = true;
+      userRequestInput.placeholder = DISABLED_REQ_PLACEHOLDER;
+      sendRequestBtn.disabled = true;
+      sendRequestBtn.innerHTML = `<span>បានផ្ញើរួចហើយថ្ងៃនេះ</span>`;
+      requestStatusMsg.style.color = "#d4d4d4";
+      requestStatusMsg.textContent = statusNoticeText || "⚠️ អ្នកបានផ្ញើសំណើ ១ដងរួចហើយក្នុងថ្ងៃនេះ។ សូមរង់ចាំថ្ងៃស្អែក!";
+    } else {
+      userRequestInput.disabled = false;
+      userRequestInput.placeholder = DEFAULT_REQ_PLACEHOLDER;
+      sendRequestBtn.disabled = false;
+      sendRequestBtn.innerHTML = SEND_BTN_DEFAULT_HTML;
+      requestStatusMsg.textContent = statusNoticeText || "";
+    }
+  }
+
+  // ============================================================================
+  // VOTE STAR HELPERS
+  // ============================================================================
+
+  function getLocalRatingsMap() {
+    try {
+      const raw = localStorage.getItem(LOCAL_RATING_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function setLocalDramaRating(titleText, stars) {
+    try {
+      const map = getLocalRatingsMap();
+      map[titleText] = Number(stars);
+      localStorage.setItem(LOCAL_RATING_STORAGE_KEY, JSON.stringify(map));
+    } catch (_) {}
+  }
+
+  function getLocalDramaRating(titleText) {
+    const map = getLocalRatingsMap();
+    return Number(map[titleText] || 0);
+  }
+
+  function updateStarUI() {}
+
+  // ============================================================================
+  // SEND USER REQUEST TO ADMIN GROUP
+  // ============================================================================
+
+  sendRequestBtn.addEventListener("click", async () => {
+    if (hasSentRequestTodayLocal()) {
+      applyDailyRequestLimitUI(true);
+      return;
+    }
+
+    const messageText = (userRequestInput.value || "").trim();
+    if (!messageText) {
+      requestStatusMsg.style.color = "#d4d4d4";
+      requestStatusMsg.textContent = "សូមសរសេរសារស្នើសុំជាមុនសិន។";
+      userRequestInput.focus();
+      return;
+    }
+
+    const profile = getTelegramUserProfile();
+    sendRequestBtn.disabled = true;
+    userRequestInput.disabled = true;
+    requestStatusMsg.style.color = "var(--muted)";
+    requestStatusMsg.textContent = "កំពុងផ្ញើទៅកាន់ Admin...";
+
+    try {
+      const res = await fetch(`${API_BASE}/api/user-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: profile.user_id,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          username: profile.username,
+          drama_title: activeDetailDramaTitle || "",
+          message: messageText
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 429) {
+        markRequestSentTodayLocal(data.cambodia_date || "");
+        applyDailyRequestLimitUI(
+          true,
+          "⚠️ អ្នកបានផ្ញើសំណើ ១ដងរួចហើយក្នុងថ្ងៃនេះ។ សូមរង់ចាំថ្ងៃស្អែក!"
+        );
+        return;
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      markRequestSentTodayLocal(data.cambodia_date || "");
+      applyDailyRequestLimitUI(
+        true,
+        "✅ បានផ្ញើសំណើជោគជ័យ! (អាចផ្ញើបាន ១ដង/១ថ្ងៃ សូមរង់ចាំថ្ងៃស្អែក)"
+      );
+      requestStatusMsg.style.color = "#d4d4d4";
+    } catch (err) {
+      console.error("Failed to send user request:", err);
+      userRequestInput.disabled = false;
+      sendRequestBtn.disabled = false;
+      requestStatusMsg.style.color = "#d4d4d4";
+      requestStatusMsg.textContent = "❌ មិនអាចផ្ញើបានទេ សូមព្យាយាមម្ដងទៀត។";
+    }
+  });
+
+  // ============================================================================
+  // SORTING BY NEWEST FIRST & METADATA EXTRACTORS
+  // ============================================================================
+
+  function parseDDMMYYYYToTimestamp(dateStr) {
+    if (!dateStr) return 0;
+    const m = String(dateStr).trim().match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (m) {
+      return Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    }
+    const parsed = Date.parse(String(dateStr));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function sortNewestDramasFirst(items) {
+    if (!Array.isArray(items)) return [];
+    return [...items].sort((a, b) => {
+      const idDiff = (Number(b?.latest_id) || 0) - (Number(a?.latest_id) || 0);
+      if (idDiff !== 0) return idDiff;
+      return parseDDMMYYYYToTimestamp(b?.upload_date) - parseDDMMYYYYToTimestamp(a?.upload_date);
+    });
+  }
+
+  function getTitle(item) {
+    return String(item?.title || item?.drama_title || item?.name || "Untitled");
+  }
+
+  function getDramaCode(item) {
+    return String(item?.drama_code || item?.code || "").trim().toUpperCase();
+  }
+
+  function getUploadDate(item) {
+    return String(item?.upload_date || "").trim();
+  }
+
+  function getDurationText(item) {
+    if (item?.duration_text) return String(item.duration_text).trim();
+    const sec = Number(item?.duration_seconds || 0);
+    if (sec > 0) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+    return "";
+  }
+
+  function getSynopsis(item) {
+    return String(item?.synopsis || item?.description || "").trim();
+  }
+
+  function getTags(item) {
+    return String(item?.tags || "").trim();
+  }
+
+  function getCoverVersion(item) {
+    return String(item?.cover_version || "v1");
+  }
+
+  function getGifUrl(item) {
+    const titleText = getTitle(item);
+    const ver = String(item?.gif_version || "v1");
+    return `${API_BASE}/api/gif/${encodeURIComponent(titleText)}?v=${encodeURIComponent(ver)}`;
+  }
+
+  function getCover(item) {
+    const ver = getCoverVersion(item);
+    if (item?.cover_url || item?.cover || item?.coverUrl) {
+      const rawUrl = String(item.cover_url || item.cover || item.coverUrl);
+      const sep = rawUrl.includes("?") ? "&" : "?";
+      return `${rawUrl}${sep}v=${encodeURIComponent(ver)}`;
+    }
+    const titleText = getTitle(item);
+    return `${API_BASE}/api/cover/${encodeURIComponent(titleText)}?v=${encodeURIComponent(ver)}`;
+  }
+
+  // ប្រសិនបើភាគនោះមាន Custom Cover ទើបហៅទៅ /api/ep-cover បើគ្មានទេប្រើរូប Cover រឿងធំដែលមានក្នុង Cache ស្រាប់
+  function getEpisodeCoverUrl(titleText, epObj, fallbackDramaCoverUrl = "") {
+    const epNum = Number(epObj?.ep_number || 1);
+    const ver = String(epObj?.cover_version || `ep_${epNum}`);
+    if (epObj?.has_custom_cover) {
+      return `${API_BASE}/api/ep-cover/${encodeURIComponent(titleText)}/${encodeURIComponent(epNum)}?v=${encodeURIComponent(ver)}`;
+    }
+    if (epObj?.cover_url && String(epObj.cover_url).startsWith("http")) {
+      const rawUrl = String(epObj.cover_url);
+      const sep = rawUrl.includes("?") ? "&" : "?";
+      return `${rawUrl}${sep}v=${encodeURIComponent(ver)}`;
+    }
+    return fallbackDramaCoverUrl || `${API_BASE}/api/cover/${encodeURIComponent(titleText)}?v=${encodeURIComponent(ver)}`;
+  }
+
+  function getAlbumPhotoUrl(titleText, slot, version = "v1") {
+    return `${API_BASE}/api/album/${encodeURIComponent(titleText)}/${encodeURIComponent(slot)}?v=${encodeURIComponent(version)}`;
+  }
+
+  function getRawViews(item) {
+    const raw = item?.views ?? item?.view_count ?? item?.views_count ?? 0;
+    const num = Number(raw);
+    return Number.isFinite(num) && num >= 0 ? num : 0;
+  }
+
+  function getViewsCount(item) {
+    const num = getRawViews(item);
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+    return String(Math.floor(num));
+  }
+
+  function normalizeCategory(cat) {
+    if (!cat) return "";
+    let c = String(cat).trim();
+    ["🇨🇳 ", "🇰🇭 ", "🤖 ", "🇰🇷 ", "✨ ", "🇨🇳", "🇰🇭", "🤖", "🇰🇷", "✨"].forEach(p => {
+      c = c.replace(p, "");
+    });
+    c = c.trim();
+    if (c === "រឿងភាគចិន") return "រឿងចិន";
+    if (c === "រឿងភាគខ្មែរ") return "រឿងខ្មែរ";
+    if (c === "រឿងភាគកូរ៉េ") return "រឿងកូរ៉េ";
+    return c;
+  }
+
+  // ============================================================================
+  // SMART SEARCH ENGINE
+  // ============================================================================
+
+  const SMART_SYNONYM_GROUPS = [
+    ["ខ្មែរ", "រឿងខ្មែរ", "រឿងសិចខ្មែរ", "សិចខ្មែរ", "khmer", "cambodia", "cambo"],
+    ["ចិន", "រឿងចិន", "រឿងសិចចិន", "chinese", "china"],
+    ["កូរ៉េ", "រឿងកូរ៉េ", "រឿងសិចកូរ៉េ", "korean", "korea"],
+    ["ជប៉ុន", "រឿងជប៉ុន", "រឿងសិចជប៉ុន", "japanese", "japan", "jav"],
+    ["ថៃ", "រឿងថៃ", "រឿងសិចថៃ", "thai", "thailand"],
+    ["អឺរ៉ុប", "បរទេស", "អាមេរិក", "western", "english", "usa"],
+    ["ស្នេហា", "រ៉ូមែនទិក", "សិចស៊ី", "រឿងសិច", "romance", "romantic", "sexy", "love"],
+    ["វាយតប់", "សកម្មភាព", "action"],
+    ["ai", "រឿងai", "រឿង ai"]
+  ];
+
+  function matchesSmartSearch(drama, rawQuery, recentTopTitlesSet) {
+    const q = String(rawQuery || "").trim().toLocaleLowerCase();
+    if (!q) return true;
+
+    if (["រឿងថ្មី", "រឿងមកដល់ថ្មី", "ថ្មី", "new", "latest"].includes(q)) {
+      return recentTopTitlesSet.has(getTitle(drama));
+    }
+
+    const title = getTitle(drama).toLocaleLowerCase();
+    const code = getDramaCode(drama).toLocaleLowerCase();
+    const cat = normalizeCategory(drama.category).toLocaleLowerCase();
+    const syn = getSynopsis(drama).toLocaleLowerCase();
+    const tags = getTags(drama).toLocaleLowerCase();
+    const serverTokens = String(drama?.search_tokens || "").toLocaleLowerCase();
+    const uploadDate = getUploadDate(drama).toLocaleLowerCase();
+
+    const searchableBlob = `${title} ${code} ${code.replace("-", "")} ${cat} ${syn} ${tags} ${serverTokens} ${uploadDate}`;
+
+    if (code) {
+      const cleanQ = q.replace(/\s+/g, "");
+      const codeNoDash = code.replace("-", "");
+      const codeNumPart = code.replace("xf-", "");
+      if (
+        code.includes(cleanQ) ||
+        codeNoDash.includes(cleanQ) ||
+        (cleanQ.match(/^\d+$/) && (codeNumPart === cleanQ.padStart(6, "0") || codeNumPart.endsWith(cleanQ)))
+      ) {
+        return true;
+      }
+    }
+
+    if (searchableBlob.includes(q)) return true;
+
+    const queryWords = q.split(/\s+/).filter(Boolean);
+    return queryWords.every(word => {
+      if (["រឿង", "រឿងសិច", "សិច", "movie", "drama", "video"].includes(word) && queryWords.length > 1) {
+        return true;
+      }
+      if (searchableBlob.includes(word)) return true;
+      for (const group of SMART_SYNONYM_GROUPS) {
+        if (group.includes(word)) {
+          return group.some(synWord => searchableBlob.includes(synWord));
+        }
+      }
+      return false;
+    });
+  }
+
+  // ============================================================================
+  // INSTANT CATALOG CACHE & FAVORITES HELPERS
+  // ============================================================================
+
+  function readCachedCatalogData() {
+    for (const key of [CATALOG_CACHE_STORAGE_KEY, CATALOG_CACHE_FALLBACK_KEY]) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          return parsed;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  function writeCachedCatalogData(items, categories, topTrending = []) {
+    const payload = JSON.stringify({
+      items,
+      top_trending: Array.isArray(topTrending) ? topTrending : [],
+      categories: Array.isArray(categories) ? categories : [],
+      ts: Date.now()
+    });
+    try {
+      localStorage.setItem(CATALOG_CACHE_STORAGE_KEY, payload);
+      localStorage.setItem(CATALOG_CACHE_FALLBACK_KEY, payload);
+    } catch (_) {}
+  }
+
+  function getLocalFavoritesSet() {
+    try {
+      const raw = localStorage.getItem(LOCAL_FAV_STORAGE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function setLocalFavoriteState(titleText, isFav) {
+    try {
+      const set = getLocalFavoritesSet();
+      if (isFav) set.add(titleText);
+      else set.delete(titleText);
+      localStorage.setItem(LOCAL_FAV_STORAGE_KEY, JSON.stringify([...set]));
+    } catch (_) {}
+  }
+
+  function isDramaFavoritedLocally(titleText) {
+    return getLocalFavoritesSet().has(titleText);
+  }
+
+  // ============================================================================
+  // STATE PERSISTENCE
+  // ============================================================================
+
+  function loadPersistedState() {
+    try {
+      const raw = localStorage.getItem(UI_STATE_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function savePersistedState(extra = {}) {
+    try {
+      const current = loadPersistedState() || {};
+      const nextState = {
+        ...current,
+        page,
+        currentCategory,
+        viewMode,
+        searchQuery: search.value || "",
+        activeDetailDramaTitle,
+        scrollY: window.scrollY || 0,
+        ...extra,
+      };
+      localStorage.setItem(UI_STATE_STORAGE_KEY, JSON.stringify(nextState));
+    } catch (_) {}
+  }
+
+  const initialSavedState = loadPersistedState();
+  let pendingRestoreDetailTitle = null;
+  let hasRestoredInitialDetail = false;
+
+  if (initialSavedState) {
+    if (Number.isInteger(initialSavedState.page) && initialSavedState.page >= 1) {
+      page = initialSavedState.page;
+    }
+    if (initialSavedState.currentCategory) {
+      currentCategory = initialSavedState.currentCategory;
+    }
+    if (["home", "history", "favorites"].includes(initialSavedState.viewMode)) {
+      viewMode = initialSavedState.viewMode;
+    }
+    if (typeof initialSavedState.searchQuery === "string") {
+      search.value = initialSavedState.searchQuery;
+    }
+    if (typeof initialSavedState.activeDetailDramaTitle === "string" && initialSavedState.activeDetailDramaTitle.trim()) {
+      pendingRestoreDetailTitle = initialSavedState.activeDetailDramaTitle.trim();
+      activeDetailDramaTitle = pendingRestoreDetailTitle;
+    }
+  }
+
+  function tryRestoreSavedDetailView() {
+    if (hasRestoredInitialDetail || !pendingRestoreDetailTitle) return;
+    const pool = [...allDramas, ...newestCatalogDramas, ...topTrendingDramas];
+    const matchedDrama = pool.find(d => d && getTitle(d) === pendingRestoreDetailTitle);
+    if (matchedDrama) {
+      hasRestoredInitialDetail = true;
+      const targetTitle = pendingRestoreDetailTitle;
+      pendingRestoreDetailTitle = null;
+      openDramaDetail(matchedDrama, true);
+    } else if (newestCatalogDramas.length > 0 || allDramas.length > 0) {
+      hasRestoredInitialDetail = true;
+      const fallbackTitle = pendingRestoreDetailTitle;
+      pendingRestoreDetailTitle = null;
+      openDramaDetail({ title: fallbackTitle }, true);
+    }
+  }
+
+  window.addEventListener("scroll", () => {
+    if (detailView.classList.contains("hidden")) {
+      savePersistedState({ scrollY: window.scrollY || 0 });
+    }
+  }, { passive: true });
+
+  // ============================================================================
+  // COVER & GIF CACHE MANAGEMENT
+  // ============================================================================
+
+  function readLocalManifest() {
+    try {
+      const raw = localStorage.getItem(MANIFEST_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeLocalManifest(manifest) {
+    try {
+      localStorage.setItem(MANIFEST_STORAGE_KEY, JSON.stringify(manifest));
+    } catch (_) {}
+  }
+
+  async function syncDramaCoverCacheManifest(activeDramaItems) {
+    const oldManifest = readLocalManifest();
+    const newManifest = {};
+
+    activeDramaItems.forEach(item => {
+      const title = getTitle(item);
+      const version = getCoverVersion(item);
+      const url = getCover(item);
+      newManifest[title] = { version, url };
+    });
+
+    const staleEntries = [];
+    for (const [oldTitle, oldInfo] of Object.entries(oldManifest)) {
+      const currentInfo = newManifest[oldTitle];
+      if (!currentInfo || currentInfo.version !== oldInfo.version || currentInfo.url !== oldInfo.url) {
+        staleEntries.push({ title: oldTitle, oldInfo });
+      }
+    }
+
+    writeLocalManifest(newManifest);
+    if (staleEntries.length === 0) return;
+
+    staleEntries.forEach(({ oldInfo }) => {
+      if (oldInfo && oldInfo.url && memoryBlobUrls.has(oldInfo.url)) {
+        try { URL.revokeObjectURL(memoryBlobUrls.get(oldInfo.url)); } catch (_) {}
+        memoryBlobUrls.delete(oldInfo.url);
+      }
+    });
+
+    if (!("caches" in window)) return;
+    try {
+      const cache = await caches.open(COVER_CACHE_NAME);
+      const requests = await cache.keys();
+      const deletePromises = [];
+
+      for (const { title, oldInfo } of staleEntries) {
+        if (oldInfo && oldInfo.url) deletePromises.push(cache.delete(oldInfo.url));
+        const encodedTitlePath = `/api/cover/${encodeURIComponent(title)}`;
+        for (const req of requests) {
+          if (req.url.includes(encodedTitlePath)) {
+            if (memoryBlobUrls.has(req.url)) {
+              try { URL.revokeObjectURL(memoryBlobUrls.get(req.url)); } catch (_) {}
+              memoryBlobUrls.delete(req.url);
+            }
+            deletePromises.push(cache.delete(req));
+          }
+        }
+      }
+      if (deletePromises.length > 0) await Promise.allSettled(deletePromises);
+    } catch (_) {}
+  }
+
+  async function loadCoverWithCache(coverUrl) {
+    if (memoryBlobUrls.has(coverUrl)) {
+      return memoryBlobUrls.get(coverUrl);
+    }
+    if (!("caches" in window)) return coverUrl;
+
+    try {
+      const cache = await caches.open(COVER_CACHE_NAME);
+      let cachedResponse = await cache.match(coverUrl);
+
+      if (cachedResponse) {
+        const cachedType = (cachedResponse.headers.get("Content-Type") || "").toLowerCase();
+        const cachedFallback = cachedResponse.headers.get("X-Cover-Fallback") === "1";
+        if (cachedFallback || cachedType.includes("image/svg+xml")) {
+          await cache.delete(coverUrl);
+          cachedResponse = null;
+        }
+      }
+
+      if (!cachedResponse) {
+        const networkResponse = await fetch(coverUrl, {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit"
+        });
+        if (!networkResponse.ok) throw new Error(`Image HTTP ${networkResponse.status}`);
+
+        const netType = (networkResponse.headers.get("Content-Type") || "").toLowerCase();
+        const isFallback = networkResponse.headers.get("X-Cover-Fallback") === "1" || netType.includes("image/svg+xml");
+
+        if (isFallback) {
+          const fallbackBlob = await networkResponse.blob();
+          return URL.createObjectURL(fallbackBlob);
+        }
+
+        await cache.put(coverUrl, networkResponse.clone());
+        cachedResponse = networkResponse;
+      }
+
+      const blob = await cachedResponse.blob();
+      if ((blob.type || "").toLowerCase().includes("svg")) {
+        await cache.delete(coverUrl);
+        return URL.createObjectURL(blob);
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+      memoryBlobUrls.set(coverUrl, objectUrl);
+      return objectUrl;
+    } catch (_) {
+      return coverUrl;
+    }
+  }
+
+  async function loadGifPreviewBlob(gifUrl) {
+    try {
+      const res = await fetch(gifUrl, { method: "GET", mode: "cors", credentials: "omit" });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (!blob || blob.size === 0) return null;
+      const objectUrl = URL.createObjectURL(blob);
+      return {
+        url: objectUrl,
+        isVideo: (blob.type || "").toLowerCase().includes("video")
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function makePlaceholder() {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="530">
+      <rect width="100%" height="100%" fill="#121212"/>
+    </svg>`;
+    return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+  }
+
+  async function triggerLazyImageLoad(img) {
+    if (!img || img.dataset.loadingStarted === "1") return;
+    img.dataset.loadingStarted = "1";
+
+    const targetUrl = img.dataset.src;
+    const fallbackPlaceholder = img.dataset.placeholder || makePlaceholder();
+    const wrap = img.parentElement;
+
+    const finalizeImageReady = () => {
+      img.classList.add("loaded");
+      wrap?.classList.add("is-ready");
+      const sp = wrap?.querySelector(".spinner-ring");
+      if (sp) sp.remove();
+    };
+
+    if (!targetUrl) {
+      img.src = fallbackPlaceholder;
+      finalizeImageReady();
+      return;
+    }
+
+    const safetyTimeout = setTimeout(() => {
+      if (!img.classList.contains("loaded")) {
+        if (!img.src) img.src = fallbackPlaceholder;
+        finalizeImageReady();
+      }
+    }, 10000);
+
+    img.onload = () => {
+      clearTimeout(safetyTimeout);
+      finalizeImageReady();
+    };
+
+    img.onerror = () => {
+      clearTimeout(safetyTimeout);
+      img.onerror = null;
+      img.src = fallbackPlaceholder;
+      finalizeImageReady();
+    };
+
+    const resolvedSrc = await loadCoverWithCache(targetUrl);
+    img.src = resolvedSrc;
+
+    if (img.complete && img.naturalWidth > 0) {
+      clearTimeout(safetyTimeout);
+      finalizeImageReady();
+    }
+  }
+
+  const imageObserver = ("IntersectionObserver" in window)
+    ? new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const img = entry.target;
+            observer.unobserve(img);
+            triggerLazyImageLoad(img);
+          }
+        });
+      }, {
+        root: null,
+        rootMargin: "320px 320px",
+        threshold: 0.01
+      })
+    : null;
+
+  function observeLazyImage(img, eagerLoad = false) {
+    if (eagerLoad || !imageObserver) {
+      triggerLazyImageLoad(img);
+    } else {
+      imageObserver.observe(img);
+    }
+  }
+
+  // ============================================================================
+  // DRAMA CARD BUILDER
+  // ============================================================================
+
+  function createDramaCardElement(drama, eagerLoad = false) {
+    const titleText = getTitle(drama);
+    const codeText = getDramaCode(drama);
+    const dateText = getUploadDate(drama);
+    const durationText = getDurationText(drama);
+    const placeholder = makePlaceholder();
+    const coverUrl = getCover(drama);
+    const viewsText = getViewsCount(drama);
+
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "card";
+
+    const coverWrap = document.createElement("div");
+    coverWrap.className = "cover-wrap";
+
+    const spinner = document.createElement("div");
+    spinner.className = "spinner-ring";
+
+    const img = document.createElement("img");
+    img.className = "cover";
+    img.loading = eagerLoad ? "eager" : "lazy";
+    img.decoding = "async";
+    img.alt = titleText;
+    img.dataset.src = coverUrl;
+    img.dataset.placeholder = placeholder;
+
+    const playOverlay = document.createElement("div");
+    playOverlay.className = "cover-play-icon";
+    playOverlay.innerHTML = LUCIDE_PLAY_OUTLINE_SVG;
+
+    const viewsBadge = document.createElement("div");
+    viewsBadge.className = "cover-views";
+    const viewsNum = document.createElement("span");
+    viewsNum.textContent = viewsText;
+    viewsBadge.innerHTML = LUCIDE_EYE_OUTLINE_SVG;
+    viewsBadge.appendChild(viewsNum);
+
+    coverWrap.append(spinner, img, playOverlay, viewsBadge);
+
+    if (durationText) {
+      const durBadge = document.createElement("div");
+      durBadge.className = "cover-duration";
+      durBadge.textContent = durationText;
+      coverWrap.appendChild(durBadge);
+    }
+
+    const body = document.createElement("div");
+    body.className = "card-body";
+
+    const title = document.createElement("div");
+    title.className = "card-title";
+    title.textContent = titleText;
+    title.title = titleText;
+
+    const meta = document.createElement("div");
+    meta.className = "card-meta";
+
+    const codeSpan = document.createElement("span");
+    codeSpan.className = "card-code-tag";
+    codeSpan.textContent = codeText || normalizeCategory(drama.category) || "XF";
+
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "card-date-tag";
+    dateSpan.textContent = dateText || normalizeCategory(drama.category) || "";
+
+    meta.append(codeSpan, dateSpan);
+    body.append(title, meta);
+    card.append(coverWrap, body);
+
+    card.addEventListener("click", (e) => {
+      const parentTrack = card.closest(".slider-track");
+      if (parentTrack && parentTrack.dataset.dragMoved === "1") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      openDramaDetail(drama);
+    });
+
+    observeLazyImage(img, eagerLoad);
+    return card;
+  }
+
+  // ============================================================================
+  // INFINITE SLIDER TRACKS
+  // ============================================================================
+
+  function getTrackMetrics(trackEl) {
+    const firstCard = trackEl.querySelector(".card");
+    const count = Number(trackEl.dataset.itemCount || 0);
+    if (!firstCard || !count) return null;
+    const gap = parseFloat(getComputedStyle(trackEl).gap) || 8;
+    const stepWidth = firstCard.getBoundingClientRect().width + gap;
+    const singleSetWidth = stepWidth * count;
+    return { stepWidth, singleSetWidth, count };
+  }
+
+  function normalizeInfiniteLoopScroll(trackEl) {
+    if (trackEl.dataset.isLoop !== "1") return;
+    const m = getTrackMetrics(trackEl);
+    if (!m || m.singleSetWidth <= 0) return;
+
+    if (trackEl.scrollLeft >= m.singleSetWidth * 2 - 4) {
+      const prevSnap = trackEl.style.scrollSnapType;
+      trackEl.style.scrollSnapType = "none";
+      trackEl.scrollLeft -= m.singleSetWidth;
+      void trackEl.offsetHeight;
+      trackEl.style.scrollSnapType = prevSnap;
+    } else if (trackEl.scrollLeft <= 4) {
+      const prevSnap = trackEl.style.scrollSnapType;
+      trackEl.style.scrollSnapType = "none";
+      trackEl.scrollLeft += m.singleSetWidth;
+      void trackEl.offsetHeight;
+      trackEl.style.scrollSnapType = prevSnap;
+    }
+  }
+
+  function populateInfiniteTrack(trackEl, dramasList) {
+    trackEl.replaceChildren();
+    if (!dramasList || dramasList.length === 0) return;
+
+    if (dramasList.length > 3) {
+      trackEl.dataset.isLoop = "1";
+      trackEl.dataset.itemCount = String(dramasList.length);
+      for (let copy = 0; copy < 3; copy++) {
+        dramasList.forEach(d => {
+          trackEl.appendChild(createDramaCardElement(d, true));
+        });
+      }
+      requestAnimationFrame(() => {
+        const m = getTrackMetrics(trackEl);
+        if (m && m.singleSetWidth > 0) {
+          const prevSnap = trackEl.style.scrollSnapType;
+          trackEl.style.scrollSnapType = "none";
+          trackEl.scrollLeft = m.singleSetWidth;
+          void trackEl.offsetHeight;
+          trackEl.style.scrollSnapType = prevSnap;
+        }
+      });
+    } else {
+      trackEl.dataset.isLoop = "0";
+      trackEl.dataset.itemCount = String(dramasList.length);
+      dramasList.forEach(d => {
+        trackEl.appendChild(createDramaCardElement(d, true));
+      });
+      trackEl.scrollLeft = 0;
+    }
+  }
+
+  function slideTrackByStep(trackEl, direction = 1, isManual = true) {
+    const m = getTrackMetrics(trackEl);
+    if (!m) return;
+
+    if (isManual) {
+      const pauseFn = sliderPauseControllers.get(trackEl);
+      if (pauseFn) pauseFn();
+    }
+
+    if (trackEl.dataset.isLoop === "1") {
+      if (direction > 0 && trackEl.scrollLeft >= m.singleSetWidth * 2 - m.stepWidth * 1.5) {
+        const prevSnap = trackEl.style.scrollSnapType;
+        trackEl.style.scrollSnapType = "none";
+        trackEl.scrollLeft -= m.singleSetWidth;
+        void trackEl.offsetHeight;
+        trackEl.style.scrollSnapType = prevSnap;
+      } else if (direction < 0 && trackEl.scrollLeft <= m.stepWidth * 1.5) {
+        const prevSnap = trackEl.style.scrollSnapType;
+        trackEl.style.scrollSnapType = "none";
+        trackEl.scrollLeft += m.singleSetWidth;
+        void trackEl.offsetHeight;
+        trackEl.style.scrollSnapType = prevSnap;
+      }
+
+      trackEl.scrollBy({ left: direction * m.stepWidth, behavior: "smooth" });
+      setTimeout(() => normalizeInfiniteLoopScroll(trackEl), 480);
+    } else {
+      const maxScroll = trackEl.scrollWidth - trackEl.clientWidth;
+      if (direction > 0) {
+        if (trackEl.scrollLeft >= maxScroll - 8) {
+          trackEl.scrollTo({ left: 0, behavior: "smooth" });
+        } else {
+          trackEl.scrollBy({ left: m.stepWidth, behavior: "smooth" });
+        }
+      } else {
+        if (trackEl.scrollLeft <= 8) {
+          trackEl.scrollTo({ left: maxScroll, behavior: "smooth" });
+        } else {
+          trackEl.scrollBy({ left: -m.stepWidth, behavior: "smooth" });
+        }
+      }
+    }
+  }
+
+  function enableDraggableAndAutoSlide(trackEl, intervalMs = 3200, allowInDetailView = false) {
+    if (sliderTimers.has(trackEl)) {
+      clearInterval(sliderTimers.get(trackEl));
+      sliderTimers.delete(trackEl);
+    }
+
+    let isPaused = false;
+    let resumeTimeout = null;
+
+    const pauseTemporarily = () => {
+      isPaused = true;
+      if (resumeTimeout) clearTimeout(resumeTimeout);
+      resumeTimeout = setTimeout(() => {
+        isPaused = false;
+      }, 4500);
+    };
+
+    sliderPauseControllers.set(trackEl, pauseTemporarily);
+
+    if (!trackEl.dataset.dragInitialized) {
+      trackEl.dataset.dragInitialized = "1";
+
+      let isMouseDown = false;
+      let startX = 0;
+      let startScrollLeft = 0;
+      let scrollEndTimer = null;
+
+      trackEl.addEventListener("scroll", () => {
+        if (scrollEndTimer) clearTimeout(scrollEndTimer);
+        scrollEndTimer = setTimeout(() => {
+          if (!isMouseDown) normalizeInfiniteLoopScroll(trackEl);
+        }, 140);
+      }, { passive: true });
+
+      trackEl.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        isMouseDown = true;
+        trackEl.dataset.dragMoved = "0";
+        normalizeInfiniteLoopScroll(trackEl);
+        startX = e.pageX - trackEl.offsetLeft;
+        startScrollLeft = trackEl.scrollLeft;
+        pauseTemporarily();
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isMouseDown) return;
+        const x = e.pageX - trackEl.offsetLeft;
+        const walk = x - startX;
+        if (Math.abs(walk) > 6) {
+          trackEl.dataset.dragMoved = "1";
+          trackEl.classList.add("is-dragging");
+          e.preventDefault();
+          trackEl.scrollLeft = startScrollLeft - walk;
+        }
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (!isMouseDown) return;
+        isMouseDown = false;
+        trackEl.classList.remove("is-dragging");
+        normalizeInfiniteLoopScroll(trackEl);
+        pauseTemporarily();
+        setTimeout(() => { trackEl.dataset.dragMoved = "0"; }, 60);
+      });
+
+      trackEl.addEventListener("touchstart", () => {
+        trackEl.dataset.dragMoved = "0";
+        normalizeInfiniteLoopScroll(trackEl);
+        pauseTemporarily();
+      }, { passive: true });
+
+      trackEl.addEventListener("touchmove", () => { pauseTemporarily(); }, { passive: true });
+      trackEl.addEventListener("touchend", () => {
+        pauseTemporarily();
+        setTimeout(() => normalizeInfiniteLoopScroll(trackEl), 260);
+      }, { passive: true });
+    }
+
+    const itemCount = Number(trackEl.dataset.itemCount || 0);
+    if (itemCount <= 3) return;
+
+    const timer = setInterval(() => {
+      if (isPaused || document.hidden) return;
+      const isDetailOpen = !detailView.classList.contains("hidden");
+      if (allowInDetailView && !isDetailOpen) return;
+      if (!allowInDetailView && isDetailOpen) return;
+      slideTrackByStep(trackEl, 1, false);
+    }, intervalMs);
+
+    sliderTimers.set(trackEl, timer);
+  }
+
+  trendPrevBtn.onclick = () => slideTrackByStep(topTrendingTrack, -1, true);
+  trendNextBtn.onclick = () => slideTrackByStep(topTrendingTrack, 1, true);
+  popPrevBtn.onclick = () => slideTrackByStep(popularTrack, -1, true);
+  popNextBtn.onclick = () => slideTrackByStep(popularTrack, 1, true);
+  recPrevBtn.onclick = () => slideTrackByStep(recommendedTrack, -1, true);
+  recNextBtn.onclick = () => slideTrackByStep(recommendedTrack, 1, true);
+
+  // ============================================================================
+  // បង្ហាញ Top trending និង រឿងពេញនិយម តែនៅទំព័រទី ១ (page === 1)
+  // ============================================================================
+
+  function renderFeaturedSliders() {
+    const query = search.value.trim();
+    const sourceCatalog = newestCatalogDramas.length > 0 ? newestCatalogDramas : allDramas;
+
+    const shouldShowSliders = (
+      viewMode === "home" &&
+      currentCategory === "all" &&
+      !query &&
+      page === 1 &&
+      sourceCatalog.length > 0
+    );
+
+    if (!shouldShowSliders) {
+      topTrendingBlock?.classList.add("hidden");
+      popularBlock.classList.add("hidden");
+      return;
+    }
+
+
+    if (topTrendingDramas && topTrendingDramas.length > 0) {
+      populateInfiniteTrack(topTrendingTrack, topTrendingDramas);
+      topTrendingCount.textContent = `${topTrendingDramas.length} រឿង`;
+      topTrendingBlock.classList.remove("hidden");
+      enableDraggableAndAutoSlide(topTrendingTrack, 3400, false);
+    } else {
+      topTrendingBlock.classList.add("hidden");
+    }
+
+    const popularDramas = [...sourceCatalog]
+      .sort((a, b) => getRawViews(b) - getRawViews(a))
+      .slice(0, SLIDER_MAX_ITEMS);
+
+    populateInfiniteTrack(popularTrack, popularDramas);
+    popularCount.textContent = `ពេញនិយម ${popularDramas.length} រឿង`;
+    popularBlock.classList.remove("hidden");
+    enableDraggableAndAutoSlide(popularTrack, 3600, false);
+  }
+
+  async function renderRecommendedSliders(currentDrama) {
+    const currentTitle = getTitle(currentDrama);
+    const currentCat = normalizeCategory(currentDrama.category);
+
+    let sourceList = newestCatalogDramas.length > 0 ? newestCatalogDramas : allDramas;
+
+    if (sourceList.length <= 1) {
+      try {
+        const res = await fetch(`${API_URL}?_t=${Date.now()}`, { cache: "no-store" });
+        if (res.ok) {
+          const d = await res.json();
+          const fetched = Array.isArray(d.items) ? d.items : [];
+          if (fetched.length > 0) {
+            newestCatalogDramas = sortNewestDramasFirst(fetched);
+            sourceList = newestCatalogDramas;
+          }
+        }
+      } catch (_) {}
+    }
+
+    const sameCatDramas = sourceList.filter(d => {
+      const t = getTitle(d);
+      if (t === currentTitle) return false;
+      return currentCat && normalizeCategory(d.category) === currentCat;
+    });
+
+    let recommendedList = [...sameCatDramas];
+    if (recommendedList.length < SLIDER_MAX_ITEMS) {
+      const otherDramas = sourceList.filter(d => {
+        const t = getTitle(d);
+        return t !== currentTitle && !recommendedList.some(r => getTitle(r) === t);
+      });
+      recommendedList = [...recommendedList, ...otherDramas];
+    }
+
+    recommendedList = recommendedList.slice(0, SLIDER_MAX_ITEMS);
+
+    if (!recommendedList.length) {
+      recommendedBlock.classList.add("hidden");
+      return;
+    }
+
+    populateInfiniteTrack(recommendedTrack, recommendedList);
+    recommendedSub.textContent = (sameCatDramas.length > 0 && currentCat)
+      ? `${currentCat} • ${recommendedList.length} រឿង`
+      : `${recommendedList.length} រឿង`;
+
+    recommendedBlock.classList.remove("hidden");
+    enableDraggableAndAutoSlide(recommendedTrack, 3300, true);
+  }
+
+  // ============================================================================
+  // បង្ហាញប្លុក រូប ALBUM (៣ រូប) តែពេលមានរូបភាពប៉ុណ្ណោះ
+  // ============================================================================
+
+  function renderDramaAlbumSection(titleText, albumList) {
+    if (!albumSection || !albumContainer) return;
+    const validAlbums = Array.isArray(albumList)
+      ? albumList.filter(item => Number(item?.slot || 0) >= 1 && Number(item?.slot || 0) <= 3)
+      : [];
+
+    if (validAlbums.length === 0) {
+      albumSection.classList.add("hidden");
+      albumContainer.replaceChildren();
+      return;
+    }
+
+    albumSection.classList.remove("hidden");
+    albumCountLabel.textContent = `${validAlbums.length} រូប`;
+    albumContainer.replaceChildren();
+
+    validAlbums.sort((a, b) => Number(a.slot) - Number(b.slot)).forEach(slotInfo => {
+      const slotNum = Number(slotInfo.slot);
+      const card = document.createElement("div");
+      card.className = "album-card";
+
+      const spinner = document.createElement("div");
+      spinner.className = "spinner-ring";
+
+      const img = document.createElement("img");
+      const photoUrl = getAlbumPhotoUrl(titleText, slotNum, slotInfo.version || "v1");
+      img.alt = `${titleText} - Album ${slotNum}`;
+      img.dataset.src = photoUrl;
+      img.dataset.placeholder = makePlaceholder();
+
+      card.append(spinner, img);
+      observeLazyImage(img, false);
+
+      card.addEventListener("click", () => {
+        openLightbox(img.src || photoUrl);
+      });
+
+      albumContainer.appendChild(card);
+    });
+  }
+
+  // ============================================================================
+  // UI HELPERS & VIEWS
+  // ============================================================================
+
+  function showStatus(message, isLoading = false, retryFn = null) {
+    container.replaceChildren();
+    const box = document.createElement("div");
+    box.className = "status";
+
+    if (isLoading) {
+      const sp = document.createElement("div");
+      sp.className = "page-spinner";
+      box.appendChild(sp);
+    }
+
+    const txt = document.createElement("div");
+    txt.textContent = message;
+    box.appendChild(txt);
+
+    if (retryFn) {
+      const button = document.createElement("button");
+      button.className = "retry";
+      button.textContent = "ព្យាយាមម្ដងទៀត";
+      button.onclick = retryFn;
+      box.appendChild(button);
+    }
+    container.appendChild(box);
+  }
+
+  function buildCategoryPills() {
+    const knownKeys = new Set(defaultCategories.map(c => c.key));
+    const dynamicCategories = [...defaultCategories];
+
+    serverCategories.forEach(rawCat => {
+      const cat = normalizeCategory(rawCat);
+      if (cat && !knownKeys.has(cat)) {
+        knownKeys.add(cat);
+        dynamicCategories.push({ key: cat, label: cat });
+      }
+    });
+
+    const sourceForCats = newestCatalogDramas.length > 0 ? newestCatalogDramas : allDramas;
+    sourceForCats.forEach(d => {
+      const cat = normalizeCategory(d.category);
+      if (cat && !knownKeys.has(cat)) {
+        knownKeys.add(cat);
+        dynamicCategories.push({ key: cat, label: cat });
+      }
+    });
+
+    if (currentCategory !== "all" && !knownKeys.has(currentCategory)) {
+      currentCategory = "all";
+    }
+
+    if (viewMode === "home") {
+      sectionTitle.textContent = currentCategory === "all" ? "រឿងទាំងអស់" : currentCategory;
+    }
+
+    categoryFilter.replaceChildren();
+    dynamicCategories.forEach(catObj => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cat-pill" + (viewMode === "home" && currentCategory === catObj.key ? " active" : "");
+      btn.dataset.cat = catObj.key;
+      btn.setAttribute("aria-pressed", viewMode === "home" && currentCategory === catObj.key ? "true" : "false");
+      btn.textContent = catObj.label;
+
+      btn.onclick = () => {
+        currentCategory = catObj.key;
+        categoryFilter.querySelectorAll("button[data-cat]").forEach(p => {
+          const active = p === btn;
+          p.classList.toggle("active", active);
+          p.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        showListView(false);
+        page = 1;
+        sectionTitle.textContent = currentCategory === "all" ? "រឿងទាំងអស់" : catObj.label;
+        savePersistedState({ page: 1, currentCategory, viewMode: "home", activeDetailDramaTitle: null });
+
+        if (viewMode !== "home") {
+          viewMode = "home";
+          document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+          document.getElementById("home-btn").classList.add('active');
+          loadDramas(true);
+        } else {
+          if (currentCategory === "all" && newestCatalogDramas.length > 0) {
+            allDramas = [...newestCatalogDramas];
+          }
+          render();
+        }
+      };
+
+      categoryFilter.appendChild(btn);
+    });
+  }
+
+  function updateDetailLikeButtonUI(isFav) {
+    favBtn?.classList.toggle("active", Boolean(isFav));
+  }
+
+  function updateDetailViewsUI(viewsNum) {
+    if (!detailViewsText) return;
+    const formatted = getViewsCount({ views: viewsNum });
+    detailViewsText.textContent = formatted;
+  }
+
+  async function toggleDramaFavorite(titleText) {
+    const currentlyFav = favBtn.classList.contains("active");
+    const nextFav = !currentlyFav;
+
+    const currentLikes = Number(favBtn.dataset.likesCount || 0);
+    const nextLikes = Math.max(0, currentLikes + (nextFav ? 1 : -1));
+    favBtn.dataset.likesCount = String(nextLikes);
+    updateDetailLikeButtonUI(nextFav, nextLikes);
+    setLocalFavoriteState(titleText, nextFav);
+
+    const userId = getUserId();
+    if (userId) {
+      try {
+        await fetch(`${API_BASE}/api/favorite`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            title: titleText,
+            is_favorite: nextFav
+          })
+        });
+      } catch (err) {
+        console.warn("Could not sync favorite to server:", err);
+      }
+    }
+  }
+
+  async function toggleAdminTopTrending(titleText) {
+    const uid = getUserId();
+    if (!uid || !isAdminUser) return;
+    const currentlyTrending = adminTrendingBtn.classList.contains("active");
+    const nextTrending = !currentlyTrending;
+    adminTrendingBtn.classList.toggle("active", nextTrending);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/toggle-trending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: uid,
+          title: titleText,
+          is_trending: nextTrending
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      showCopyToast(nextTrending ? "🔥 បានដាក់ក្នុង Top Trending!" : "បានដកចេញពី Top Trending!");
+      loadDramas(true, true);
+    } catch (err) {
+      adminTrendingBtn.classList.toggle("active", currentlyTrending);
+      showCopyToast("❌ មិនអាចកែប្រែ Top Trending បានទេ");
+    }
+  }
+
+  function showChannelJoinModal(channelLink, titleText, epNumber, clickedButton, isFailedRetry = false) {
+    const existing = document.getElementById("xfansterChannelJoinModal");
+    if (existing) existing.remove();
+
+    const targetLink = String(channelLink || "https://t.me/xfanster").trim();
+
+    const overlay = document.createElement("div");
+    overlay.id = "xfansterChannelJoinModal";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.86);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:22px;font-family:inherit;";
+
+    const panel = document.createElement("div");
+    panel.style.cssText = "width:100%;max-width:360px;background:#111;border:1px solid #303030;border-radius:18px;padding:22px;color:#f5f5f5;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,.7);";
+
+    const heading = document.createElement("div");
+    heading.textContent = "🔒 ចូល Channel ឬ Group ជាមុនសិន";
+    heading.style.cssText = "font-size:18.5px;font-weight:700;margin-bottom:10px;";
+
+    const description = document.createElement("div");
+    description.textContent = "ដើម្បីមើលវីដេអូ χƒαη 18 קɭυѕ សូមចូល Channel ឬ Group ជាមុនសិន។ អ្នកមិនទាន់ចូល ដាច់ខាតមិនអាចមើលវីដេអូបានឡើយ!";
+    description.style.cssText = "font-size:13.5px;line-height:1.65;color:#bdbdbd;margin-bottom:14px;";
+
+    const warnBox = document.createElement("div");
+    warnBox.style.cssText = "font-size:12.5px;line-height:1.5;color:#ff8a8a;background:rgba(255,70,70,0.1);border:1px solid rgba(255,90,90,0.3);border-radius:10px;padding:9px 11px;margin-bottom:14px;" + (isFailedRetry ? "display:block;" : "display:none;");
+    warnBox.textContent = "⚠️ អ្នកមិនទាន់បានចូលក្នុង Channel ឬ Group នៅឡើយទេ! សូមចុចប៊ូតុងខាងក្រោមដើម្បី Join ជាមុនសិន។";
+
+    const joinButton = document.createElement("button");
+    joinButton.type = "button";
+    joinButton.textContent = "📢 ចូល Channel χƒαη 18 קɭυѕ";
+    joinButton.style.cssText = "width:100%;border:0;border-radius:12px;padding:13px 14px;background:#ededed;color:#111;font-size:14.5px;font-weight:700;margin-bottom:9px;";
+    joinButton.onclick = () => {
+      window.__xfansterPendingJoinRetry = {
+        titleText,
+        epNumber,
+        clickedButton,
+        channelLink: targetLink,
+        clickedAt: Date.now()
+      };
+      const tg = window.Telegram?.WebApp;
+      if (tg?.openTelegramLink && (targetLink.includes("t.me/") || targetLink.startsWith("tg://"))) {
+        tg.openTelegramLink(targetLink);
+      } else if (tg?.openLink) {
+        tg.openLink(targetLink);
+      } else {
+        window.open(targetLink, "_blank", "noopener,noreferrer");
+      }
+    };
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.textContent = "បិទ";
+    closeButton.style.cssText = "display:block;margin:13px auto 0;border:0;background:transparent;color:#888;font-size:13px;padding:5px 12px;";
+    closeButton.onclick = () => {
+      window.__xfansterPendingJoinRetry = null;
+      overlay.remove();
+      if (clickedButton) clickedButton.disabled = false;
+    };
+
+    panel.append(heading, description, warnBox, joinButton, closeButton);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  }
+
+  function retryPendingChannelJoin() {
+    const pending = window.__xfansterPendingJoinRetry;
+    if (!pending || document.visibilityState === "hidden") return;
+    if (pending.clickedAt && (Date.now() - pending.clickedAt) < 500) return;
+    window.__xfansterPendingJoinRetry = null;
+    playEpisodeInBot(pending.titleText, pending.epNumber, pending.clickedButton, true);
+  }
+
+  if (!window.__xfansterJoinReturnListenersAdded) {
+    window.__xfansterJoinReturnListenersAdded = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") retryPendingChannelJoin();
+    });
+    window.addEventListener("focus", retryPendingChannelJoin);
+    window.addEventListener("pageshow", retryPendingChannelJoin);
+  }
+
+  async function playEpisodeInBot(titleText, epNumber, clickedButton, isRetryAfterModal = false) {
+    savePersistedState();
+    const tg = window.Telegram?.WebApp;
+    const userId = getUserId();
+    if (userId) {
+      const originalHTML = clickedButton ? clickedButton.innerHTML : "";
+      try {
+        if (clickedButton && !isRetryAfterModal) {
+          clickedButton.disabled = true;
+        }
+        const res = await fetch(`${API_BASE}/api/select-drama`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, title: titleText, ep_number: epNumber })
+        });
+        if (res.status === 403) {
+          const data = await res.json().catch(() => ({}));
+          if (data.status === "join_required") {
+            if (clickedButton) {
+              clickedButton.innerHTML = originalHTML;
+              clickedButton.disabled = false;
+            }
+            showChannelJoinModal(
+              data.channel_link || "https://t.me/xfanster",
+              titleText,
+              epNumber,
+              clickedButton,
+              Boolean(isRetryAfterModal)
+            );
+            return;
+          }
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const existingModal = document.getElementById("xfansterChannelJoinModal");
+        if (existingModal) existingModal.remove();
+        tg?.close();
+      } catch (error) {
+        console.error("Play episode failed:", error);
+        if (clickedButton) {
+          clickedButton.innerHTML = originalHTML;
+          clickedButton.disabled = false;
+        }
+        alert("មិនអាចបើកភាគនេះបានទេ សូមព្យាយាមម្ដងទៀត។");
+      }
+    } else if (tg) {
+      try {
+        tg.sendData(JSON.stringify({ action: "select_drama", title: titleText, ep_number: epNumber }));
+      } catch (error) {
+        alert("សូមបើក Mini App នេះពីក្នុង Telegram Bot ផ្ទាល់។");
+      }
+    } else {
+      alert("សូមបើក Mini App នេះពី Telegram Bot ដើម្បីជ្រើសរើសភាគ។");
+    }
+  }
+
+  function updateDetailCodeAndDateBadges(codeStr, dateStr, catStr, durationStr = "") {
+    if (codeStr) {
+      detailCodeText.textContent = codeStr;
+      detailCodeBtn.classList.remove("hidden");
+      detailCodeBtn.onclick = () => copyDramaCodeToClipboard(codeStr);
+    } else {
+      detailCodeBtn.classList.add("hidden");
+    }
+
+    if (durationStr) {
+      detailDurationPill.textContent = `⏱ ${durationStr}`;
+      detailDurationPill.classList.remove("hidden");
+    } else {
+      detailDurationPill.classList.add("hidden");
+    }
+
+    const parts = [];
+    if (dateStr) parts.push(`🗓 ${dateStr}`);
+    if (catStr) parts.push(catStr);
+
+    if (parts.length > 0) {
+      detailDatePill.textContent = parts.join(" • ");
+      detailDatePill.classList.remove("hidden");
+    } else {
+      detailDatePill.classList.add("hidden");
+    }
+  }
+
+  function resetDetailGifPreview() {
+    if (detailGifVideo) {
+      detailGifVideo.pause();
+      detailGifVideo.removeAttribute("src");
+      detailGifVideo.classList.remove("loaded");
+      detailGifVideo.classList.add("hidden");
+    }
+    detailCover?.classList.remove("hidden");
+  }
+
+  async function tryActivateDetailGifPreview(dramaObj, requestSeq) {
+    const gifUrl = getGifUrl(dramaObj);
+    const gifData = await loadGifPreviewBlob(gifUrl);
+    if (!gifData || requestSeq !== activeDetailRequestSeq) return;
+
+    detailSpinner.style.display = "none";
+
+    if (gifData.isVideo && detailGifVideo) {
+      detailCover?.classList.add("hidden");
+      detailGifVideo.classList.remove("hidden");
+      detailGifVideo.src = gifData.url;
+      detailGifVideo.onloadeddata = () => {
+        detailGifVideo.classList.add("loaded");
+        detailGifVideo.play().catch(() => {});
+      };
+    } else if (detailCover) {
+      detailGifVideo?.classList.add("hidden");
+      detailCover.classList.remove("hidden");
+      detailCover.src = gifData.url;
+      detailCover.classList.add("loaded");
+    }
+  }
+
+  // ============================================================================
+  // បង្កើត Card ភាគរឿង (រូប Cover វីដេអូភាគ + លេខភាគខាងក្រោម)
+  // ============================================================================
+
+  function createEpisodeCoverCard(titleText, epObj, targetEp, lastEp, fallbackDramaCoverUrl) {
+    const epNum = Number(epObj.ep_number || 1);
+    const epCoverUrl = getEpisodeCoverUrl(titleText, epObj, fallbackDramaCoverUrl);
+    const placeholder = makePlaceholder();
+
+    const wrap = document.createElement("div");
+    wrap.className = "ep-card-wrap";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ep-card" + (epNum === targetEp ? " current" : "");
+
+    const thumbWrap = document.createElement("div");
+    thumbWrap.className = "ep-thumb-wrap";
+
+    const spinner = document.createElement("div");
+    spinner.className = "spinner-ring";
+    spinner.style.width = "18px";
+    spinner.style.height = "18px";
+
+    const img = document.createElement("img");
+    img.className = "ep-thumb";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.alt = `ភាគ ${epNum}`;
+    img.dataset.src = epCoverUrl;
+    img.dataset.placeholder = placeholder;
+
+    const playMini = document.createElement("div");
+    playMini.className = "ep-play-mini";
+    playMini.innerHTML = `<svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
+
+    thumbWrap.append(spinner, img, playMini);
+
+    const numBar = document.createElement("div");
+    numBar.className = "ep-num-bar";
+
+    const numTxt = document.createElement("span");
+    numTxt.textContent = `ភាគ ${epNum}`;
+    numBar.appendChild(numTxt);
+
+    if (lastEp && epNum === lastEp) {
+      const dot = document.createElement("span");
+      dot.className = "latest-dot";
+      dot.setAttribute("aria-label", "ភាគដែលបានមើលចុងក្រោយ");
+      numBar.appendChild(dot);
+    }
+
+    btn.append(thumbWrap, numBar);
+    btn.addEventListener("click", () => {
+      playEpisodeInBot(titleText, epNum, btn);
+    });
+
+    observeLazyImage(img, false);
+    wrap.appendChild(btn);
+
+    return wrap;
+  }
+
+  async function openDramaDetail(drama, isRestoring = false) {
+    const requestSeq = ++activeDetailRequestSeq;
+    const titleText = getTitle(drama);
+    const placeholder = makePlaceholder();
+    const coverUrl = getCover(drama);
+    const initialCode = getDramaCode(drama);
+    const initialDate = getUploadDate(drama);
+    const initialDuration = getDurationText(drama);
+    const initialCat = normalizeCategory(drama.category);
+
+    activeDetailDramaTitle = titleText;
+    activeDetailDramaObj = drama;
+    savePersistedState({ activeDetailDramaTitle: titleText });
+
+    listView.classList.add("hidden");
+    detailView.classList.remove("hidden");
+    if (!isRestoring) {
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+
+    detailTitle.textContent = titleText;
+    updateDetailCodeAndDateBadges(initialCode, initialDate, initialCat, initialDuration);
+
+    resetDetailGifPreview();
+    detailCover.classList.remove("loaded");
+    detailCoverWrap.style.backgroundImage = "none";
+    detailSpinner.style.display = "block";
+
+    const initialViews = getRawViews(drama);
+    updateDetailViewsUI(initialViews);
+
+    const isFavInitial = Boolean(drama.is_favorite) || isDramaFavoritedLocally(titleText);
+    const initialLikes = Number(drama.likes_count || (isFavInitial ? 1 : 0));
+    favBtn.dataset.likesCount = String(initialLikes);
+    updateDetailLikeButtonUI(isFavInitial, initialLikes);
+    favBtn.onclick = () => toggleDramaFavorite(titleText);
+
+    if (adminTrendingBtn) {
+      adminTrendingBtn.classList.add("hidden");
+    }
+
+    const localStars = getLocalDramaRating(titleText);
+    updateStarUI(localStars);
+
+    applyDailyRequestLimitUI(hasSentRequestTodayLocal());
+
+    detailCover.onload = () => {
+      detailCover.classList.add("loaded");
+      detailSpinner.style.display = "none";
+    };
+    detailCover.onerror = () => {
+      detailCover.onerror = null;
+      detailCover.src = placeholder;
+      detailCover.classList.add("loaded");
+      detailSpinner.style.display = "none";
+    };
+
+    loadCoverWithCache(coverUrl).then(resolvedUrl => {
+      if (requestSeq !== activeDetailRequestSeq) return;
+      if (detailGifVideo.classList.contains("hidden")) {
+        detailCover.src = resolvedUrl || placeholder;
+        if (detailCover.complete && detailCover.naturalWidth > 0) {
+          detailCover.classList.add("loaded");
+          detailSpinner.style.display = "none";
+        }
+      }
+    });
+
+    detailSub.textContent = "កំពុងផ្ទុកភាគ...";
+    epCount.textContent = "";
+    continueBtn.innerHTML = `<span class="btn-mini-spinner"></span><span>កំពុងផ្ទុក...</span>`;
+    continueBtn.classList.remove("hidden");
+    continueBtn.disabled = true;
+    continueBtn.onclick = null;
+
+    albumSection.classList.add("hidden");
+    albumContainer.replaceChildren();
+    episodesSection.classList.add("hidden");
+    episodesContainer.replaceChildren();
+
+    renderRecommendedSliders(drama);
+
+    try {
+      const userId = getUserId();
+      const queryParam = userId ? `?user_id=${encodeURIComponent(userId)}&_t=${Date.now()}` : `?_t=${Date.now()}`;
+      const url = `${API_BASE}/api/dramas/${encodeURIComponent(titleText)}/episodes${queryParam}`;
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { "Accept": "application/json" },
+        cache: "no-store"
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      if (requestSeq !== activeDetailRequestSeq) return;
+
+      if (data.is_admin === true) {
+        isAdminUser = true;
+        adminStatsBtn?.classList.remove("hidden");
+      }
+
+      const episodes = Array.isArray(data.episodes) ? data.episodes : [];
+      const lastEp = data.last_ep ? Number(data.last_ep) : null;
+
+      const resolvedCode = String(data.drama_code || initialCode || "").trim().toUpperCase();
+      const resolvedDate = String(data.upload_date || initialDate || "").trim();
+      const resolvedDuration = String(data.duration_text || initialDuration || "").trim();
+      updateDetailCodeAndDateBadges(resolvedCode, resolvedDate, initialCat, resolvedDuration);
+
+      if (data.has_gif || drama.has_gif) {
+        tryActivateDetailGifPreview({ ...drama, has_gif: true, gif_version: data.gif_version || drama.gif_version }, requestSeq);
+      }
+
+      const resolvedViews = (data.views !== undefined && data.views !== null)
+        ? Math.max(initialViews, Number(data.views) || 0)
+        : initialViews;
+      updateDetailViewsUI(resolvedViews);
+
+      const mergedFav = Boolean(data.is_favorite) || isDramaFavoritedLocally(titleText);
+      const resolvedLikes = Math.max(
+        Number(data.likes_count || 0),
+        mergedFav ? 1 : 0
+      );
+      favBtn.dataset.likesCount = String(resolvedLikes);
+      updateDetailLikeButtonUI(mergedFav, resolvedLikes);
+      if (data.is_favorite) setLocalFavoriteState(titleText, true);
+
+      if (data.can_request_today === false) {
+        markRequestSentTodayLocal(data.cambodia_date || "");
+        applyDailyRequestLimitUI(true);
+      } else {
+        applyDailyRequestLimitUI(hasSentRequestTodayLocal());
+      }
+
+      const serverUserRating = Number(data.user_rating || localStars || 0);
+      if (serverUserRating > 0) setLocalDramaRating(titleText, serverUserRating);
+      updateStarUI(serverUserRating, Number(data.avg_rating || 0), Number(data.rating_count || 0));
+
+      renderDramaAlbumSection(titleText, data.album || []);
+
+      episodesContainer.replaceChildren();
+
+      if (!episodes.length) {
+        detailSub.textContent = "មិនទាន់មានភាគទេ";
+        continueBtn.innerHTML = `<span>មិនទាន់មានភាគ</span>`;
+        continueBtn.disabled = true;
+        episodesSection.classList.add("hidden");
+        return;
+      }
+
+      const isSingleVideoMovie = episodes.length === 1;
+      const targetEp = lastEp || Number(episodes[0].ep_number) || 1;
+
+      if (isSingleVideoMovie) {
+        detailSub.textContent = "មួយភាគចប់ (Full)";
+        continueBtn.innerHTML = `${PLAY_LINE_ICON}<span>មើលរឿងពេញ</span>`;
+        continueBtn.disabled = false;
+        continueBtn.onclick = () => playEpisodeInBot(titleText, targetEp, continueBtn);
+        episodesSection.classList.add("hidden");
+      } else {
+        episodesSection.classList.remove("hidden");
+        epCount.textContent = `${episodes.length} ភាគ`;
+        detailSub.textContent = lastEp
+          ? `ធ្លាប់មើលដល់ ភាគ ${lastEp} • សរុប ${episodes.length} ភាគ`
+          : `សរុប ${episodes.length} ភាគ`;
+
+        const labelText = lastEp ? `បន្តភាគ ${lastEp}` : `មើលភាគ ${targetEp}`;
+        continueBtn.innerHTML = `${PLAY_LINE_ICON}<span>${labelText}</span>`;
+        continueBtn.disabled = false;
+        continueBtn.onclick = () => playEpisodeInBot(titleText, targetEp, continueBtn);
+
+        episodes.forEach(epObj => {
+          episodesContainer.appendChild(
+            createEpisodeCoverCard(titleText, epObj, targetEp, lastEp, coverUrl)
+          );
+        });
+      }
+    } catch (error) {
+      if (requestSeq !== activeDetailRequestSeq) return;
+      console.error("Load episodes failed:", error);
+      detailSub.textContent = "បរាជ័យក្នុងការទាញភាគ";
+      continueBtn.innerHTML = `<span>មិនអាចផ្ទុកភាគ</span>`;
+      continueBtn.disabled = true;
+      episodesSection.classList.remove("hidden");
+      episodesContainer.replaceChildren();
+      const errBox = document.createElement("div");
+      errBox.className = "status";
+      errBox.textContent = "មិនអាចទាញយកបញ្ជីភាគបានទេ។";
+      const retryBtn = document.createElement("button");
+      retryBtn.className = "retry";
+      retryBtn.textContent = "ព្យាយាមម្ដងទៀត";
+      retryBtn.onclick = () => openDramaDetail(drama);
+      errBox.appendChild(retryBtn);
+      episodesContainer.appendChild(errBox);
+    }
+  }
+
+  function showListView(clearDetailState = true) {
+    resetDetailGifPreview();
+    detailView.classList.add("hidden");
+    listView.classList.remove("hidden");
+    if (clearDetailState) {
+      activeDetailDramaTitle = null;
+      activeDetailDramaObj = null;
+      savePersistedState({ activeDetailDramaTitle: null });
+    }
+    if (viewMode === "favorites") {
+      loadFavorites(true);
+    }
+  }
+
+  backBtn.addEventListener("click", () => {
+    showListView(true);
+  });
+
+  function render() {
+    const query = search.value.trim();
+    const sourceCatalog = newestCatalogDramas.length > 0 ? newestCatalogDramas : allDramas;
+    const recentTopTitlesSet = new Set(
+      sourceCatalog.slice(0, Math.min(12, sourceCatalog.length)).map(d => getTitle(d))
+    );
+
+    const filtered = allDramas.filter(drama => {
+      const matchSearch = matchesSmartSearch(drama, query, recentTopTitlesSet);
+      const itemCat = normalizeCategory(drama.category);
+      const matchCat = viewMode !== "home" || currentCategory === "all" || itemCat === currentCategory;
+      return matchSearch && matchCat;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    page = Math.max(1, Math.min(page, totalPages));
+    savePersistedState({ page });
+
+    renderFeaturedSliders();
+
+    const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    container.replaceChildren();
+
+    if (!visible.length) {
+      const emptyMsg = query
+        ? "រកមិនឃើញរឿងដែលត្រូវគ្នាទេ។"
+        : (viewMode === "favorites" ? "មិនទាន់មានរឿងក្នុងបញ្ជីចូលចិត្តទេ។" : "មិនទាន់មានរឿងក្នុងបញ្ជីនេះទេ។");
+      showStatus(emptyMsg, false);
+    } else {
+      visible.forEach(drama => {
+        container.appendChild(createDramaCardElement(drama, false));
+      });
+    }
+
+    prev.disabled = page <= 1;
+    next.disabled = page >= totalPages;
+    pageLabel.textContent = `ទំព័រ ${page} / ${totalPages}`;
+    countLabel.textContent = `${filtered.length} រឿង`;
+  }
+
+  async function loadDramas(preservePage = true, silentRefresh = false) {
+    let renderedFromInstantCache = false;
+
+    if (!silentRefresh && newestCatalogDramas.length === 0) {
+      const cachedCatalog = readCachedCatalogData();
+      if (cachedCatalog && Array.isArray(cachedCatalog.items) && cachedCatalog.items.length > 0) {
+        if (Array.isArray(cachedCatalog.categories)) {
+          serverCategories = cachedCatalog.categories;
+        }
+        if (Array.isArray(cachedCatalog.top_trending)) {
+          topTrendingDramas = cachedCatalog.top_trending;
+        }
+        newestCatalogDramas = sortNewestDramasFirst(
+          cachedCatalog.items.filter(item => item && (item.title || item.drama_title || item.name))
+        );
+        allDramas = [...newestCatalogDramas];
+        buildCategoryPills();
+        if (!preservePage) page = 1;
+        render();
+        tryRestoreSavedDetailView();
+        renderedFromInstantCache = true;
+        hideAppSplash();
+
+        if (initialSavedState?.scrollY) {
+          setTimeout(() => {
+            window.scrollTo({ top: Number(initialSavedState.scrollY) || 0, behavior: "instant" });
+          }, 30);
+        }
+      }
+    }
+
+    if (!silentRefresh && !renderedFromInstantCache) {
+      countLabel.textContent = "កំពុងផ្ទុក...";
+      showStatus("កំពុងទាញយកបញ្ជីរឿង...", true);
+    }
+
+    try {
+      const uid = getUserId();
+      const queryStr = uid ? `?user_id=${encodeURIComponent(uid)}&_t=${Date.now()}` : `?_t=${Date.now()}`;
+      const response = await fetch(`${API_URL}${queryStr}`, {
+        method: "GET",
+        headers: { "Accept": "application/json" },
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error(`API HTTP ${response.status}`);
+      const data = await response.json();
+
+      isAdminUser = Boolean(data.is_admin);
+      if (isAdminUser) {
+        adminStatsBtn?.classList.remove("hidden");
+      } else {
+        adminStatsBtn?.classList.add("hidden");
+      }
+
+      const items = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : (Array.isArray(data.dramas) ? data.dramas : []));
+
+      if (Array.isArray(data.categories)) {
+        serverCategories = data.categories;
+      }
+
+      if (Array.isArray(data.top_trending)) {
+        topTrendingDramas = data.top_trending;
+      } else {
+        topTrendingDramas = [];
+      }
+
+      newestCatalogDramas = sortNewestDramasFirst(
+        items.filter(item => item && (item.title || item.drama_title || item.name))
+      );
+      writeCachedCatalogData(newestCatalogDramas, serverCategories, topTrendingDramas);
+
+      if (!silentRefresh || allDramas.length === 0) {
+        allDramas = [...newestCatalogDramas];
+      } else {
+        const byTitle = new Map(newestCatalogDramas.map(d => [getTitle(d), d]));
+        const updatedExisting = allDramas
+          .map(d => byTitle.get(getTitle(d)))
+          .filter(Boolean);
+        const existingSet = new Set(updatedExisting.map(d => getTitle(d)));
+        const newlyAdded = newestCatalogDramas.filter(d => !existingSet.has(getTitle(d)));
+        allDramas = sortNewestDramasFirst([...newlyAdded, ...updatedExisting]);
+      }
+
+      syncDramaCoverCacheManifest(newestCatalogDramas).catch(() => {});
+
+      buildCategoryPills();
+      if (!preservePage && !renderedFromInstantCache) page = 1;
+      render();
+      tryRestoreSavedDetailView();
+
+      if (!silentRefresh && !renderedFromInstantCache && initialSavedState?.scrollY) {
+        setTimeout(() => {
+          window.scrollTo({ top: Number(initialSavedState.scrollY) || 0, behavior: "instant" });
+        }, 60);
+      }
+    } catch (error) {
+      console.error("Failed to load dramas:", error);
+      if (!silentRefresh && !renderedFromInstantCache) {
+        countLabel.textContent = "មិនអាចផ្ទុកបាន";
+        showStatus("មិនអាចទាញបញ្ជីរឿងបានទេ។ សូមពិនិត្យការភ្ជាប់ API រួចសាកម្ដងទៀត។", false, () => loadDramas(true, false));
+        pageLabel.textContent = "Error";
+        prev.disabled = true;
+        next.disabled = true;
+      }
+    } finally {
+      hideAppSplash();
+    }
+  }
+
+  async function loadHistory(preservePage = true) {
+    const userId = getUserId();
+    if (!userId) {
+      countLabel.textContent = "Error";
+      showStatus("សូមបើក Mini App ពីក្នុង Telegram Bot ដើម្បីអាចមើលប្រវត្តិរឿងបាន។", false);
+      hideAppSplash();
+      return;
+    }
+
+    countLabel.textContent = "កំពុងផ្ទុក...";
+    showStatus("កំពុងទាញយកប្រវត្តិរឿង...", true);
+    sectionTitle.textContent = "រឿងធ្លាប់មើល";
+
+    try {
+      const response = await fetch(`${API_BASE}/api/history/${userId}?_t=${Date.now()}`, {
+        method: "GET",
+        headers: { "Accept": "application/json" },
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error(`API HTTP ${response.status}`);
+      const data = await response.json();
+      allDramas = data.items || [];
+      if (!preservePage) page = 1;
+      render();
+      tryRestoreSavedDetailView();
+    } catch (error) {
+      console.error("Failed to load history:", error);
+      countLabel.textContent = "មិនអាចផ្ទុកបាន";
+      showStatus("មិនអាចទាញប្រវត្តិរឿងបានទេ។ សូមសាកល្បងម្ដងទៀត។", false, () => loadHistory(true));
+      prev.disabled = true;
+      next.disabled = true;
+    } finally {
+      hideAppSplash();
+    }
+  }
+
+  async function loadFavorites(preservePage = true) {
+    countLabel.textContent = "កំពុងផ្ទុក...";
+    showStatus("កំពុងទាញយករឿងចូលចិត្ត...", true);
+    sectionTitle.textContent = "រឿងចូលចិត្ត";
+
+    try {
+      const userId = getUserId();
+      let serverFavItems = [];
+
+      if (userId) {
+        const res = await fetch(`${API_BASE}/api/favorites/${userId}?_t=${Date.now()}`, {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+          cache: "no-store"
+        });
+        if (res.ok) {
+          const data = await res.json();
+          serverFavItems = Array.isArray(data.items) ? data.items : [];
+          serverFavItems.forEach(item => setLocalFavoriteState(getTitle(item), true));
+        }
+      }
+
+      const localSet = getLocalFavoritesSet();
+      if (localSet.size > 0 && serverFavItems.length === 0) {
+        const dramasRes = await fetch(`${API_URL}?_t=${Date.now()}`, { cache: "no-store" });
+        if (dramasRes.ok) {
+          const dData = await dramasRes.json();
+          const allItems = Array.isArray(dData.items) ? dData.items : [];
+          newestCatalogDramas = sortNewestDramasFirst(allItems);
+          serverFavItems = newestCatalogDramas.filter(d => localSet.has(getTitle(d)));
+        }
+      }
+
+      allDramas = serverFavItems;
+      if (!preservePage) page = 1;
+      render();
+      tryRestoreSavedDetailView();
+    } catch (error) {
+      console.error("Failed to load favorites:", error);
+      countLabel.textContent = "មិនអាចផ្ទុកបាន";
+      showStatus("មិនអាចទាញបញ្ជីរឿងចូលចិត្តបានទេ។ សូមសាកល្បងម្ដងទៀត។", false, () => loadFavorites(true));
+      prev.disabled = true;
+      next.disabled = true;
+    } finally {
+      hideAppSplash();
+    }
+  }
+
+  search.addEventListener("input", () => {
+    showListView(true);
+    page = 1;
+    savePersistedState({ page: 1, searchQuery: search.value });
+    render();
+  });
+
+  prev.addEventListener("click", () => {
+    if (page > 1) {
+      page--;
+      savePersistedState({ page });
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
+
+  next.addEventListener("click", () => {
+    page++;
+    savePersistedState({ page });
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  function goHomeAction() {
+    viewMode = "home";
+    currentCategory = "all";
+    page = 1;
+    search.value = "";
+    activeDetailDramaTitle = null;
+    activeDetailDramaObj = null;
+    savePersistedState({
+      page: 1,
+      currentCategory: "all",
+      viewMode: "home",
+      searchQuery: "",
+      activeDetailDramaTitle: null,
+      scrollY: 0
+    });
+    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById("home-btn").classList.add('active');
+    sectionTitle.textContent = "រឿងទាំងអស់";
+    showListView(true);
+    loadDramas(false, false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  document.getElementById("home-btn").onclick = goHomeAction;
+
+  document.getElementById("focus-search").onclick = () => {
+    showListView(true);
+    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById("focus-search").classList.add('active');
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    search.focus();
+  };
+
+  document.getElementById("favorites-btn").onclick = () => {
+    showListView(true);
+    search.value = "";
+    viewMode = "favorites";
+    page = 1;
+    savePersistedState({
+      page: 1,
+      viewMode: "favorites",
+      searchQuery: "",
+      activeDetailDramaTitle: null,
+      scrollY: 0
+    });
+    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById("favorites-btn").classList.add('active');
+    document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+    loadFavorites(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  document.getElementById("history-btn").onclick = () => {
+    showListView(true);
+    search.value = "";
+    viewMode = "history";
+    page = 1;
+    savePersistedState({
+      page: 1,
+      viewMode: "history",
+      searchQuery: "",
+      activeDetailDramaTitle: null,
+      scrollY: 0
+    });
+    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById("history-btn").classList.add('active');
+    document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+    loadHistory(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && viewMode === "home" && detailView.classList.contains("hidden")) {
+      loadDramas(true, true);
+    }
+  });
+
+  if (viewMode === "history") {
+    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById("history-btn").classList.add('active');
+    loadHistory(true);
+  } else if (viewMode === "favorites") {
+    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById("favorites-btn").classList.add('active');
+    loadFavorites(true);
+  } else {
+    loadDramas(true, false);
+  }
+})();
+</script>
+</body>
+</html>
