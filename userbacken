@@ -664,8 +664,11 @@ def execute_user_bot_broadcast_async(
             cover_msg_id = int(custom_cover_msg_id) if custom_cover_msg_id else (int(db_cover_msg_id) if db_cover_msg_id else None)
             cover_file_id = (custom_cover_file_id or "").strip() or (db_cover_file_id or "").strip()
 
-            # Notification action button: ▶️ មើលឥឡូវនេះ (kept as requested)
-            watch_markup = InlineKeyboardMarkup()
+            # Force-join notification: show ONLY the Channel button first.
+            # The Watch button is revealed after Telegram confirms membership.
+            join_markup = InlineKeyboardMarkup()
+            watch_token = None
+            target_ep_num = 1
             try:
                 available_eps = get_episode_rows(drama_title)
                 first_video_ep = next(
@@ -678,18 +681,17 @@ def execute_user_bot_broadcast_async(
                 )
                 target_ep_num = int(first_video_ep["ep_number"]) if first_video_ep else 1
                 watch_token = create_notification_watch_token(drama_title, target_ep_num)
-                if watch_token:
-                    watch_markup.add(
-                        InlineKeyboardButton(
-                            "▶️ មើលឥឡូវនេះ",
-                            callback_data=f"notif_watch_{watch_token}",
-                        )
+                join_markup.add(
+                    InlineKeyboardButton(
+                        f"📢 ចូល Channel {CHANNEL_DISPLAY_NAME}",
+                        url=get_required_channel_link(),
                     )
+                )
             except Exception:
-                log.exception("Could not prepare notification watch button for %s", drama_title)
+                log.exception("Could not prepare notification join button for %s", drama_title)
 
-            if not watch_markup.keyboard:
-                watch_markup = None
+            if not join_markup.keyboard:
+                join_markup = None
 
             escaped_title = html.escape(drama_title)
             code_text = html.escape(drama_code or "XF-000001")
@@ -723,11 +725,12 @@ def execute_user_bot_broadcast_async(
 
             for uid in user_ids:
                 delivered = False
-                markup = watch_markup
+                markup = join_markup
+                sent_message_id = None
 
                 if cover_msg_id:
                     try:
-                        bot.copy_message(
+                        sent_copy = bot.copy_message(
                             chat_id=uid,
                             from_chat_id=CHANNEL_ID,
                             message_id=int(cover_msg_id),
@@ -735,36 +738,46 @@ def execute_user_bot_broadcast_async(
                             parse_mode="HTML",
                             reply_markup=markup,
                         )
+                        sent_message_id = getattr(sent_copy, "message_id", None)
                         delivered = True
                     except Exception:
                         delivered = False
 
                 if not delivered and valid_photo_fid:
                     try:
-                        bot.send_photo(
+                        sent_photo = bot.send_photo(
                             chat_id=uid,
                             photo=valid_photo_fid,
                             caption=caption_text,
                             parse_mode="HTML",
                             reply_markup=markup,
                         )
+                        sent_message_id = getattr(sent_photo, "message_id", None)
                         delivered = True
                     except Exception:
                         delivered = False
 
                 if not delivered:
                     try:
-                        bot.send_message(
+                        sent_text = bot.send_message(
                             chat_id=uid,
                             text=caption_text,
                             parse_mode="HTML",
                             reply_markup=markup,
                         )
+                        sent_message_id = getattr(sent_text, "message_id", None)
                         delivered = True
                     except Exception:
                         delivered = False
 
                 if delivered:
+                    if watch_token and sent_message_id:
+                        PENDING_WATCH_AFTER_JOIN[int(uid)] = {
+                            "drama_title": drama_title,
+                            "ep_number": int(target_ep_num),
+                            "notif_msg_id": int(sent_message_id),
+                            "watch_token": watch_token,
+                        }
                     sent_ok += 1
                 else:
                     failed_count += 1
@@ -2228,20 +2241,21 @@ def is_required_channel_member(user_id: int) -> bool:
     return False
 
 
-def build_bot_chat_join_channel_markup(watch_token: str) -> InlineKeyboardMarkup:
-    """
-    Point 3.3: Builds the inline keyboard shown directly in the User Bot Chat when a user clicks
-    watch from a Notification (or Bot Chat) without having joined the Channel/Group yet.
-    No longer forces the user to open the Mini App!
-    """
-    req_link = get_required_channel_link()
+def build_bot_chat_join_channel_markup(watch_token: Optional[str] = None) -> InlineKeyboardMarkup:
+    """Show only the required Channel join button until membership is confirmed."""
     markup = InlineKeyboardMarkup()
     markup.add(
         InlineKeyboardButton(
             f"📢 ចូល Channel {CHANNEL_DISPLAY_NAME}",
-            url=req_link,
+            url=get_required_channel_link(),
         )
     )
+    return markup
+
+
+def build_bot_chat_watch_markup(watch_token: str) -> InlineKeyboardMarkup:
+    """Reveal the Watch button only after Telegram confirms the user joined."""
+    markup = InlineKeyboardMarkup()
     markup.add(
         InlineKeyboardButton(
             "▶️ មើលឥឡូវនេះ",
@@ -2263,16 +2277,9 @@ def send_bot_chat_join_prompt(user_id: int, drama_title: str, ep_number: int = 1
         "notif_msg_id": None,
     }
     watch_token = create_notification_watch_token(drama_title, int(ep_number or 1))
-    markup = (
-        build_bot_chat_join_channel_markup(watch_token)
-        if watch_token
-        else InlineKeyboardMarkup().add(
-            InlineKeyboardButton(
-                f"📢 ចូល Channel {CHANNEL_DISPLAY_NAME}",
-                url=get_required_channel_link(),
-            )
-        )
-    )
+    markup = build_bot_chat_join_channel_markup()
+    if watch_token:
+        PENDING_WATCH_AFTER_JOIN[uid]["watch_token"] = watch_token
     try:
         sent_prompt = bot.send_message(
             chat_id=uid,
@@ -2284,6 +2291,7 @@ def send_bot_chat_join_prompt(user_id: int, drama_title: str, ep_number: int = 1
             parse_mode="HTML",
             reply_markup=markup,
         )
+        PENDING_WATCH_AFTER_JOIN[uid]["notif_msg_id"] = int(sent_prompt.message_id)
         track_trash_message(uid, sent_prompt.message_id)
     except Exception:
         log.warning("Could not send join prompt to user %s", uid)
@@ -2504,11 +2512,16 @@ def handle_user_chat_member_update(update):
             status == "restricted" and bool(getattr(new_member, "is_member", False))
         ):
             pending = PENDING_WATCH_AFTER_JOIN.pop(uid, None)
-            if pending and pending.get("drama_title"):
-                notif_mid = pending.get("notif_msg_id")
-                if notif_mid:
-                    safe_delete_one(uid, int(notif_mid))
-                send_drama_episode(uid, pending["drama_title"], int(pending.get("ep_number") or 1))
+            if pending and pending.get("watch_token") and pending.get("notif_msg_id"):
+                try:
+                    bot.edit_message_reply_markup(
+                        chat_id=uid,
+                        message_id=int(pending["notif_msg_id"]),
+                        reply_markup=build_bot_chat_watch_markup(str(pending["watch_token"])),
+                    )
+                    log.info("Revealed Watch button after user %s joined required channel", uid)
+                except Exception:
+                    log.exception("Could not reveal Watch button for user %s", uid)
         elif status in {"left", "kicked"}:
             PENDING_JOIN_REQUEST_USERS.discard((cid, uid))
     except Exception:
@@ -2900,7 +2913,8 @@ def handle_notification_watch(call):
                 "ep_number": int(ep_number),
                 "notif_msg_id": call.message.message_id if call.message else None,
             }
-            join_markup = build_bot_chat_join_channel_markup(token)
+            PENDING_WATCH_AFTER_JOIN[user_id]["watch_token"] = token
+            join_markup = build_bot_chat_join_channel_markup()
             try:
                 bot.edit_message_reply_markup(
                     chat_id=call.message.chat.id,
@@ -2911,7 +2925,7 @@ def handle_notification_watch(call):
                 pass
             bot.answer_callback_query(
                 call.id,
-                f"⚠️ សូមចុចប៊ូតុង «📢 ចូល Channel {CHANNEL_DISPLAY_NAME}» ជាមុនសិន រួចចុច «▶️ មើលឥឡូវនេះ» ម្ដងទៀត!",
+                f"⚠️ សូមចូល Channel {CHANNEL_DISPLAY_NAME} ជាមុនសិន។ បន្ទាប់ពីចូលរួច ប៊ូតុង «មើលឥឡូវនេះ» នឹងបង្ហាញដោយស្វ័យប្រវត្តិ។",
                 show_alert=True,
             )
             return
