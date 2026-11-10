@@ -1,0 +1,5027 @@
+import os
+import re
+import time
+import json
+import logging
+import secrets
+import html
+import hashlib
+import io
+import tempfile
+import threading
+import requests
+from typing import Optional
+from datetime import datetime, timezone, timedelta
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+import telebot
+from telebot.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    InputMediaPhoto,
+)
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
+from supabase import create_client, Client
+
+# =====================================================
+# CONFIGURATION
+# =====================================================
+
+load_dotenv()
+
+BOT_TOKEN = (
+    os.getenv("ADMIN_BOT_TOKEN", "").strip()
+    or os.getenv("BOT_TOKEN", "").strip()
+)
+USER_BOT_TOKEN_ENV = os.getenv("USER_BOT_TOKEN", "").strip()
+
+MINI_APP_URL = (
+    os.getenv("MINI_APP_URL", "").strip()
+    or os.getenv("USER_MINI_APP_URL", "").strip()
+)
+
+ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
+ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "").strip()
+CHANNEL_ID = (
+    os.getenv("CHANNEL_ID", "").strip()
+    or os.getenv("SOURCE_CHANNEL_ID", "").strip()
+)
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = (
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    or os.getenv("SUPABASE_KEY", "").strip()
+)
+
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "").strip()
+if not WEBHOOK_SECRET and BOT_TOKEN:
+    WEBHOOK_SECRET = hashlib.sha256(BOT_TOKEN.encode("utf-8")).hexdigest()[:32]
+
+PUBLIC_BASE_URL = (
+    os.getenv("PUBLIC_BASE_URL", "").strip()
+    or os.getenv("RENDER_EXTERNAL_URL", "").strip()
+).rstrip("/")
+
+if PUBLIC_BASE_URL and not PUBLIC_BASE_URL.startswith(("http://", "https://")):
+    PUBLIC_BASE_URL = "https://" + PUBLIC_BASE_URL
+
+WEBHOOK_PATH = "/telegram/webhook"
+WEBHOOK_URL = (PUBLIC_BASE_URL + WEBHOOK_PATH) if PUBLIC_BASE_URL else ""
+
+CAT_STORE_PREFIX = "__CAT__"
+SYN_STORE_PREFIX = "__SYN__"
+FAV_STORE_PREFIX = "__FAV__"
+LANG_STORE_PREFIX = "__LANG__"
+CODE_STORE_PREFIX = "__CODE__"
+DATE_STORE_PREFIX = "__DATE__"
+DUR_STORE_PREFIX = "__DUR__"
+TAGS_STORE_PREFIX = "__TAGS__"
+GIF_STORE_PREFIX = "__GIF__"
+ALBUM_STORE_PREFIX = "__ALBUM__"
+EP_COV_STORE_PREFIX = "__EPCOV__"
+
+USER_START_KEY = "__USER_START__"
+CFG_ADMINS_KEY = "__CFG__ADMIN_IDS"
+CFG_TRENDING_KEY = "__CFG__TOP_TRENDING"
+CFG_USER_BOT_TOKEN_KEY = "__CFG__USER_BOT_TOKEN"
+CFG_MINI_APP_URL_KEY = "__CFG__MINI_APP_URL"
+CFG_NOTIF_QUEUE_KEY = "__CFG__NOTIF_QUEUE"
+CFG_REQ_CHANNEL_ID_KEY = "__CFG__REQ_CHANNEL_ID"
+CFG_REQ_CHANNEL_LINK_KEY = "__CFG__REQ_CHANNEL_LINK"
+CFG_REQ_CHANNEL_JSON_KEY = "__CFG__REQUIRED_CHANNEL"
+NOTIF_STATS_KEY = "__CFG__NOTIF_STATS"
+CHANNEL_DISPLAY_NAME = "χƒαη 18 קɭυѕ"
+DEFAULT_REQ_CHANNEL_ID = int(os.getenv("REQUIRED_CHANNEL_ID", "-1004467396484").strip() or "-1004467396484")
+DEFAULT_REQ_CHANNEL_LINK = os.getenv("REQUIRED_CHANNEL_LINK", "https://t.me/xfanster").strip() or "https://t.me/xfanster"
+
+CAMBODIA_TZ = timezone(timedelta(hours=7))
+
+# =====================================================
+# LOGGING & VALIDATE ENVIRONMENT
+# =====================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+log = logging.getLogger("xfanster_admin_bot")
+
+
+def _parse_int_safely(raw_val: str, name: str) -> int:
+    cleaned = str(raw_val or "").strip()
+    if cleaned.lstrip("-").isdigit():
+        return int(cleaned)
+    m = re.search(r"-?\d+", cleaned)
+    if m:
+        return int(m.group(0))
+    raise RuntimeError(f"{name} must be a numeric ID (got: {raw_val!r}).")
+
+
+required_settings = {
+    "ADMIN_BOT_TOKEN (or BOT_TOKEN)": BOT_TOKEN,
+    "ADMIN_ID": ADMIN_ID,
+    "CHANNEL_ID (or SOURCE_CHANNEL_ID)": CHANNEL_ID,
+    "SUPABASE_URL": SUPABASE_URL,
+    "SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY)": SUPABASE_KEY,
+}
+
+missing = [name for name, value in required_settings.items() if not value]
+if missing:
+    raise RuntimeError("Missing Render environment variables: " + ", ".join(missing))
+
+ADMIN_ID_INT = _parse_int_safely(ADMIN_ID, "ADMIN_ID")
+CHANNEL_ID_VALUE = _parse_int_safely(CHANNEL_ID, "CHANNEL_ID")
+
+ENV_ADMIN_IDS = {ADMIN_ID_INT}
+if ADMIN_IDS_RAW:
+    for part in ADMIN_IDS_RAW.replace(";", ",").split(","):
+        part = part.strip()
+        if part.lstrip("-").isdigit():
+            ENV_ADMIN_IDS.add(int(part))
+
+# =====================================================
+# TELEGRAM + SUPABASE + STATE
+# =====================================================
+
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+admin_states = {}
+chat_cleanup_ids = {}
+last_webhook_check = 0.0
+dynamic_admin_ids = set(ENV_ADMIN_IDS)
+
+BTN_NEW_DRAMA = "➕ បញ្ចូលរឿងថ្មី"
+BTN_ADD_EP = "📹 បន្ថែមភាគ"
+BTN_EDIT_DRAMA = "✏️ កែរឿង / ប្រភេទ"
+BTN_DELETE_DRAMA = "🗑️ លុបរឿង / ភាគ"
+BTN_TOP_TRENDING = "🔥 គ្រប់គ្រង Top Trending"
+BTN_CHECK_DRAMA = "📋 ពិនិត្យភាគរឿង"
+BTN_NOTIFY_DRAMA = "🔔 ផ្ញើ Notification រឿងថ្មី"
+BTN_USER_ANALYTICS = "📊 ស្ថិតិអ្នកប្រើប្រាស់"
+BTN_MANAGE_ADMINS = "👥 គ្រប់គ្រង Admin"
+BTN_CANCEL = "❌ បោះបង់"
+
+BTN_EDIT_TITLE = "📝 កែចំណងជើងរឿង"
+BTN_EDIT_EP = "🔢 កែលេខភាគ"
+BTN_EDIT_CATEGORY = "🗂 ប្ដូរប្រភេទឱ្យរឿង"
+BTN_EDIT_LANG = "🎧 កែប្រភេទសំឡេង (និយាយ/Sub)"
+BTN_EDIT_COVER = "🖼️ ប្ដូររូប Cover រឿង"
+BTN_EDIT_EP_COVER = "🖼️ ប្ដូររូប Cover តាមភាគ"
+BTN_EDIT_ALBUM = "📸 កែ/ដាក់រូប Album (៣រូប)"
+BTN_EDIT_GIF = "🎞️ ប្ដូរ GIF Preview"
+BTN_EDIT_SYNOPSIS = "📖 កែសង្ខេបរឿង"
+BTN_EDIT_TAGS = "🏷 កែ Tags / Keywords"
+BTN_MANAGE_CATEGORY = "⚙️ គ្រប់គ្រង Category (បន្ថែម/កែ/លុប)"
+
+BTN_ADD_TRENDING = "➕ ជ្រើសរើសរឿងដាក់ Top Trending"
+BTN_REMOVE_TRENDING = "➖ ដករឿងចេញពី Top Trending"
+BTN_LIST_TRENDING = "📋 បញ្ជីរឿង Top Trending"
+BTN_CLEAR_TRENDING = "🗑️ សម្អាត Top Trending ទាំងអស់"
+
+BTN_UPLOAD_NEW_ALBUM = "📤 Upload រូប Album ថ្មី (១-៣ រូប)"
+BTN_CLEAR_ALBUM = "🗑️ លុបរូប Album ទាំងអស់ចោល"
+BTN_SKIP_ALBUM = "⏭ រំលង (មិនដាក់រូប Album)"
+BTN_DONE_ALBUM = "✅ រួចរាល់រូប Album (បន្តទៅមុខ)"
+
+BTN_ADD_ADMIN = "➕ បន្ថែម Admin ថ្មី"
+BTN_REMOVE_ADMIN = "➖ ដកសិទ្ធិ Admin"
+BTN_LIST_ADMINS = "📋 បញ្ជី Admin ទាំងអស់"
+
+BTN_LANG_DUB = "🎙 និយាយខ្មែរ"
+BTN_LANG_SUB = "📝 Sub ខ្មែរ"
+
+BTN_ADD_NEW_CAT = "➕ បន្ថែម Category ថ្មី"
+BTN_RENAME_CAT_ACTION = "✏️ កែឈ្មោះ Category នេះ"
+BTN_DELETE_CAT_ACTION = "🗑️ លុប Category នេះចោល"
+
+BTN_DEL_ALL_DRAMA = "💥 លុបរឿងទាំងមូល"
+BTN_DEL_SINGLE_EP = "✂️ លុបតែមួយភាគ"
+
+BTN_PREV_PAGE = "⬅️ ទំព័រមុន"
+BTN_NEXT_PAGE = "ទំព័របន្ទាប់ ➡️"
+BTN_ONE_SHOT = "🎬 មួយភាគចប់ (Full)"
+BTN_SKIP_SYNOPSIS = "⏭ រំលង (មិនដាក់សង្ខេប)"
+
+BTN_PICK_FRAME_1 = "🖼️ ជ្រើសរើសរូបទី 1"
+BTN_PICK_FRAME_2 = "🖼️ ជ្រើសរើសរូបទី 2"
+BTN_PICK_FRAME_3 = "🖼️ ជ្រើសរើសរូបទី 3"
+BTN_PICK_FRAME_4 = "🖼️ ជ្រើសរើសរូបទី 4"
+BTN_PICK_FRAME_5 = "🖼️ ជ្រើសរើសរូបទី 5"
+BTN_UPLOAD_CUSTOM_COVER = "📤 Upload រូប Cover ផ្ទាល់ខ្លួន"
+
+BTN_SEND_NOTIF_NOW = "🔔 ផ្ញើ Notification ឥឡូវនេះ"
+BTN_NOTIF_UPLOAD_COVER = "📤 Upload រូប Cover ថ្មីសម្រាប់ Notification"
+BTN_SKIP_NOTIF = "⏭ មិនផ្ញើទេ (រួចរាល់)"
+
+BTN_CHANNEL_SETTINGS = "📢 កំណត់ Channel/Group តម្រូវឱ្យចូល"
+BTN_SET_REQ_CHANNEL_ID = "🆔 ប្ដូរ Channel/Group ID"
+BTN_SET_REQ_CHANNEL_LINK = "🔗 ប្ដូរ Link / URL Channel/Group"
+BTN_SET_REQ_CHANNEL_BOTH = "⚡ ប្ដូរទាំង ID និង Link ព្រមគ្នា"
+BTN_VIEW_REQ_CHANNEL = "📋 មើលការកំណត់ Channel បច្ចុប្បន្ន"
+
+
+def is_internal_key(title: str) -> bool:
+    if not title:
+        return True
+    t = str(title)
+    return (
+        t.startswith(CAT_STORE_PREFIX)
+        or t.startswith(SYN_STORE_PREFIX)
+        or t.startswith(FAV_STORE_PREFIX)
+        or t.startswith(LANG_STORE_PREFIX)
+        or t.startswith(CODE_STORE_PREFIX)
+        or t.startswith(DATE_STORE_PREFIX)
+        or t.startswith(DUR_STORE_PREFIX)
+        or t.startswith(TAGS_STORE_PREFIX)
+        or t.startswith(GIF_STORE_PREFIX)
+        or t.startswith(ALBUM_STORE_PREFIX)
+        or t.startswith(EP_COV_STORE_PREFIX)
+        or t == USER_START_KEY
+        or t.startswith("__RATE__")
+        or t.startswith("__CFG__")
+        or t.startswith("__REQ")
+    )
+
+
+def get_cambodia_now() -> datetime:
+    return datetime.now(CAMBODIA_TZ)
+
+
+def get_cambodia_date_ddmmyyyy() -> str:
+    return get_cambodia_now().strftime("%d-%m-%Y")
+
+
+def get_cambodia_date_int() -> int:
+    return int(get_cambodia_now().strftime("%Y%m%d"))
+
+
+def normalize_date_to_ddmmyyyy(raw_val: str) -> str:
+    if not raw_val:
+        return ""
+    s = str(raw_val).strip()
+    if re.match(r"^\d{2}-\d{2}-\d{4}$", s):
+        return s
+    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            dt_kh = dt.astimezone(CAMBODIA_TZ)
+            return dt_kh.strftime("%d-%m-%Y")
+        except Exception:
+            parts = s[:10].split("-")
+            if len(parts) == 3:
+                return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    return s
+
+
+# =====================================================
+# RESOLVE USER BOT INSTANCE & MINI APP URL (FOR REQ 7)
+# =====================================================
+
+def get_resolved_user_bot_token() -> str:
+    """ទាញយក Token របស់ User Bot ពិតប្រាកដ (មិនឱ្យច្រឡំជាមួយ Admin Bot Token ដាច់ខាត)"""
+    if USER_BOT_TOKEN_ENV and USER_BOT_TOKEN_ENV != BOT_TOKEN:
+        return USER_BOT_TOKEN_ENV
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", CFG_USER_BOT_TOKEN_KEY)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            saved_tok = str(res.data[0]["cover_file_id"]).strip()
+            if saved_tok and saved_tok != BOT_TOKEN:
+                return saved_tok
+    except Exception:
+        log.warning("Could not fetch USER_BOT_TOKEN from DB")
+    return ""
+
+
+def get_resolved_mini_app_url() -> str:
+    if MINI_APP_URL and MINI_APP_URL.startswith(("http://", "https://")):
+        return MINI_APP_URL.rstrip("/")
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", CFG_MINI_APP_URL_KEY)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            u = str(res.data[0]["cover_file_id"]).strip().rstrip("/")
+            if u.startswith(("http://", "https://")):
+                return u
+    except Exception:
+        pass
+    return ""
+
+
+# =====================================================
+# POINT 4: DYNAMIC FORCE-JOIN CHANNEL/GROUP CONFIG IN SUPABASE
+# =====================================================
+
+def get_required_channel_config_from_db() -> tuple[int, str]:
+    """ទាញយក Channel/Group ID និង Invite Link សម្រាប់លក្ខខណ្ឌតម្រូវឱ្យចូលមុនមើលរឿងពី Supabase"""
+    cid = DEFAULT_REQ_CHANNEL_ID
+    clink = DEFAULT_REQ_CHANNEL_LINK
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_file_id")
+            .in_(
+                "drama_title",
+                [CFG_REQ_CHANNEL_JSON_KEY, CFG_REQ_CHANNEL_ID_KEY, CFG_REQ_CHANNEL_LINK_KEY],
+            )
+            .execute()
+        )
+        for row in (res.data or []):
+            k = (row.get("drama_title") or "").strip()
+            val = (row.get("cover_file_id") or "").strip()
+            if not val:
+                continue
+            if k == CFG_REQ_CHANNEL_JSON_KEY:
+                try:
+                    parsed = json.loads(val)
+                    if isinstance(parsed, dict):
+                        raw_id = str(parsed.get("channel_id") or "").strip()
+                        raw_link = str(parsed.get("channel_link") or "").strip()
+                        if raw_id.lstrip("-").isdigit():
+                            cid = int(raw_id)
+                        if raw_link.startswith(("http://", "https://", "tg://")):
+                            clink = raw_link
+                except Exception:
+                    pass
+            elif k == CFG_REQ_CHANNEL_ID_KEY and val.lstrip("-").isdigit():
+                cid = int(val)
+            elif k == CFG_REQ_CHANNEL_LINK_KEY and val.startswith(("http://", "https://", "tg://")):
+                clink = val
+    except Exception:
+        log.warning("Could not load required channel config from Supabase; using defaults")
+    return int(cid), str(clink)
+
+
+def normalize_channel_link_input(raw_link: str) -> str:
+    s = (raw_link or "").strip()
+    if not s:
+        return ""
+    if s.startswith("@"):
+        return f"https://t.me/{s.lstrip('@')}"
+    if s.startswith("t.me/"):
+        return f"https://{s}"
+    if s.startswith(("http://", "https://", "tg://")):
+        return s
+    return ""
+
+
+def _resolve_and_normalize_channel_id(raw_id: Optional[int], raw_link: Optional[str], fallback_id: int) -> tuple[int, str]:
+    """
+    Auto-normalizes Channel/Group ID (ensuring -100 prefix for supergroups/channels)
+    and auto-detects the numeric chat.id if a public t.me/<username> link is provided.
+    """
+    resolved_id = int(raw_id) if raw_id is not None else int(fallback_id)
+    resolved_link = (raw_link or "").strip()
+
+    # 1. If a public link (https://t.me/username) was given, try to resolve its real chat.id via Telegram API
+    if resolved_link:
+        m_user = re.match(r"^(?:https?://)?(?:t\.me|telegram\.me)/([A-Za-z0-9_]{4,64})/?$", resolved_link)
+        if m_user:
+            uname = m_user.group(1)
+            if uname.lower() not in {"joinchat", "addlist", "share", "c", "s"}:
+                try:
+                    chat_obj = bot.get_chat(f"@{uname}")
+                    if chat_obj and getattr(chat_obj, "id", None):
+                        resolved_id = int(chat_obj.id)
+                except Exception:
+                    pass
+
+    # 2. If raw_id was given without -100 prefix, probe Telegram API to find the exact working chat.id
+    if raw_id is not None:
+        cid = int(raw_id)
+        abs_str = str(abs(cid))
+        candidates = []
+        if abs_str.startswith("100") and len(abs_str) > 5:
+            candidates.append(-int(abs_str))
+        else:
+            candidates.append(int(f"-100{abs_str}"))
+        if cid not in candidates:
+            candidates.append(cid)
+        if -abs(cid) not in candidates:
+            candidates.append(-abs(cid))
+
+        resolved_id = candidates[0]
+        for cand in candidates:
+            try:
+                chat_obj = bot.get_chat(cand)
+                if chat_obj and getattr(chat_obj, "id", None):
+                    resolved_id = int(chat_obj.id)
+                    if not resolved_link:
+                        if getattr(chat_obj, "username", None):
+                            resolved_link = f"https://t.me/{chat_obj.username}"
+                        elif getattr(chat_obj, "invite_link", None):
+                            resolved_link = str(chat_obj.invite_link)
+                    break
+            except Exception:
+                continue
+
+    return int(resolved_id), resolved_link
+
+
+def save_required_channel_config_to_db(
+    channel_id: Optional[int] = None,
+    channel_link: Optional[str] = None,
+) -> tuple[int, str]:
+    """រក្សាទុក Channel/Group ID និង Invite Link ចូលក្នុង Supabase ដោយស្វ័យប្រវត្តិ និងជូនដំណឹងទៅ User Backend"""
+    cur_id, cur_link = get_required_channel_config_from_db()
+    norm_link = normalize_channel_link_input(channel_link) if channel_link is not None else cur_link
+    if not norm_link:
+        norm_link = cur_link
+    new_id, auto_link = _resolve_and_normalize_channel_id(channel_id, norm_link, cur_id)
+    new_link = auto_link or norm_link or cur_link
+
+    try:
+        supabase.table("drama_covers").upsert(
+            [
+                {
+                    "drama_title": CFG_REQ_CHANNEL_ID_KEY,
+                    "cover_file_id": str(new_id),
+                    "cover_channel_msg_id": 0,
+                },
+                {
+                    "drama_title": CFG_REQ_CHANNEL_LINK_KEY,
+                    "cover_file_id": new_link,
+                    "cover_channel_msg_id": 0,
+                },
+                {
+                    "drama_title": CFG_REQ_CHANNEL_JSON_KEY,
+                    "cover_file_id": json.dumps(
+                        {"channel_id": new_id, "channel_link": new_link},
+                        ensure_ascii=False,
+                    ),
+                    "cover_channel_msg_id": 0,
+                },
+            ],
+            on_conflict="drama_title",
+        ).execute()
+    except Exception:
+        log.exception("Failed to save required channel config to Supabase")
+
+    base_url = get_resolved_mini_app_url()
+    if base_url:
+        try:
+            requests.post(
+                f"{base_url}/api/internal/channel-config",
+                json={"channel_id": new_id, "channel_link": new_link},
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+    return new_id, new_link
+
+
+# =====================================================
+# MULTIPLE ADMINS MANAGEMENT
+# =====================================================
+
+def load_admins_from_db() -> set[int]:
+    global dynamic_admin_ids
+    admins = set(ENV_ADMIN_IDS)
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", CFG_ADMINS_KEY)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            raw = str(res.data[0]["cover_file_id"])
+            for part in raw.split(","):
+                part = part.strip()
+                if part.lstrip("-").isdigit():
+                    admins.add(int(part))
+    except Exception:
+        log.warning("Could not load extra admin IDs from DB")
+    dynamic_admin_ids = admins
+    return dynamic_admin_ids
+
+
+def save_admins_to_db(admin_set: set[int]) -> bool:
+    global dynamic_admin_ids
+    merged = set(ENV_ADMIN_IDS) | set(admin_set)
+    dynamic_admin_ids = merged
+    serialized = ",".join(str(uid) for uid in sorted(merged))
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", CFG_ADMINS_KEY)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": CFG_ADMINS_KEY,
+            "cover_file_id": serialized,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(payload).eq("drama_title", CFG_ADMINS_KEY).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+        return True
+    except Exception:
+        log.exception("Failed to save admin IDs to DB")
+        return False
+
+
+def is_admin(user_id) -> bool:
+    if not user_id:
+        return False
+    uid = int(user_id)
+    if uid in dynamic_admin_ids or uid in ENV_ADMIN_IDS:
+        return True
+    loaded = load_admins_from_db()
+    return uid in loaded
+
+
+# =====================================================
+# TOP TRENDING MANAGEMENT (REQ 6)
+# =====================================================
+
+def get_top_trending_from_db() -> list[str]:
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", CFG_TRENDING_KEY)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            raw = res.data[0]["cover_file_id"]
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(x).strip() for x in parsed if str(x).strip()]
+    except Exception:
+        log.warning("Could not parse Top Trending list from DB")
+    return []
+
+
+def save_top_trending_to_db(titles_list: list[str]) -> bool:
+    clean_list = []
+    seen = set()
+    for t in titles_list:
+        s = str(t or "").strip()
+        if s and not is_internal_key(s) and s not in seen:
+            seen.add(s)
+            clean_list.append(s)
+
+    serialized = json.dumps(clean_list, ensure_ascii=False)
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", CFG_TRENDING_KEY)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": CFG_TRENDING_KEY,
+            "cover_file_id": serialized,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(payload).eq("drama_title", CFG_TRENDING_KEY).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+        return True
+    except Exception:
+        log.exception("Failed to save Top Trending list to DB")
+        return False
+
+
+# =====================================================
+# DRAMA CODE (XF-000001), UPLOAD DATE, DURATION & GIF
+# =====================================================
+
+def format_drama_code(num: int) -> str:
+    return f"XF-{int(num):06d}"
+
+
+def parse_code_number(code_str: str) -> int:
+    if not code_str:
+        return 0
+    m = re.match(r"^XF-(\d+)$", str(code_str).strip().upper())
+    if m:
+        return int(m.group(1))
+    return 0
+
+
+def get_all_codes_map_from_db() -> dict[str, str]:
+    code_map = {}
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_file_id")
+            .like("drama_title", f"{CODE_STORE_PREFIX}%")
+            .execute()
+        )
+        for r in (res.data or []):
+            k = (r.get("drama_title") or "").strip()
+            val = (r.get("cover_file_id") or "").strip().upper()
+            if k.startswith(CODE_STORE_PREFIX) and val.startswith("XF-"):
+                real_title = k[len(CODE_STORE_PREFIX):].strip()
+                if real_title:
+                    code_map[real_title] = val
+    except Exception:
+        log.warning("Could not fetch __CODE__ rows")
+
+    try:
+        res_col = (
+            supabase.table("drama_covers")
+            .select("drama_title, drama_code")
+            .execute()
+        )
+        for r in (res_col.data or []):
+            t = (r.get("drama_title") or "").strip()
+            c = (r.get("drama_code") or "").strip().upper()
+            if t and not is_internal_key(t) and c.startswith("XF-") and t not in code_map:
+                code_map[t] = c
+    except Exception:
+        pass
+
+    return code_map
+
+
+def save_drama_code_in_db(drama_title: str, drama_code: str) -> str:
+    clean_title = (drama_title or "").strip()
+    clean_code = (drama_code or "").strip().upper()
+    if not clean_title or not clean_code:
+        return clean_code
+
+    key = f"{CODE_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": key,
+            "cover_file_id": clean_code,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(payload).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+    except Exception:
+        log.warning("Could not save __CODE__ key for %s", clean_title)
+
+    try:
+        supabase.table("drama_covers").update({"drama_code": clean_code}).eq("drama_title", clean_title).execute()
+    except Exception:
+        pass
+
+    return clean_code
+
+
+def ensure_drama_code(drama_title: str) -> str:
+    clean_title = (drama_title or "").strip()
+    if not clean_title or is_internal_key(clean_title):
+        return ""
+
+    code_map = get_all_codes_map_from_db()
+    if clean_title in code_map:
+        return code_map[clean_title]
+
+    used_numbers = {parse_code_number(c) for c in code_map.values() if parse_code_number(c) > 0}
+    next_num = (max(used_numbers) + 1) if used_numbers else 1
+    while next_num in used_numbers:
+        next_num += 1
+
+    new_code = format_drama_code(next_num)
+    save_drama_code_in_db(clean_title, new_code)
+    return new_code
+
+
+def sync_all_existing_drama_codes():
+    try:
+        ep_res = (
+            supabase.table("episodes")
+            .select("drama_title, channel_msg_id")
+            .order("channel_msg_id", desc=False)
+            .execute()
+        )
+        ordered_titles = []
+        seen = set()
+        for r in (ep_res.data or []):
+            t = (r.get("drama_title") or "").strip()
+            if t and not is_internal_key(t) and t not in seen:
+                seen.add(t)
+                ordered_titles.append(t)
+
+        code_map = get_all_codes_map_from_db()
+        used_numbers = {parse_code_number(c) for c in code_map.values() if parse_code_number(c) > 0}
+        next_num = (max(used_numbers) + 1) if used_numbers else 1
+
+        for t in ordered_titles:
+            if t not in code_map:
+                while next_num in used_numbers:
+                    next_num += 1
+                new_code = format_drama_code(next_num)
+                used_numbers.add(next_num)
+                code_map[t] = new_code
+                save_drama_code_in_db(t, new_code)
+    except Exception:
+        log.warning("Could not sync existing drama codes at startup")
+
+
+def get_drama_upload_date_from_db(drama_title: str) -> str:
+    clean_title = (drama_title or "").strip()
+    if not clean_title:
+        return ""
+    key = f"{DATE_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            return normalize_date_to_ddmmyyyy(res.data[0]["cover_file_id"])
+    except Exception:
+        pass
+    return ""
+
+
+def ensure_drama_upload_date(drama_title: str, custom_date_ddmmyyyy: str = None) -> str:
+    clean_title = (drama_title or "").strip()
+    if not clean_title or is_internal_key(clean_title):
+        return ""
+
+    existing_date = get_drama_upload_date_from_db(clean_title)
+    if existing_date:
+        return existing_date
+
+    date_str = custom_date_ddmmyyyy or get_cambodia_date_ddmmyyyy()
+    key = f"{DATE_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": key,
+            "cover_file_id": date_str,
+            "cover_channel_msg_id": 0,
+        }
+        if not res.data:
+            supabase.table("drama_covers").insert(payload).execute()
+    except Exception:
+        log.warning("Could not save __DATE__ key for %s", clean_title)
+
+    return date_str
+
+
+def save_drama_duration_in_db(drama_title: str, duration_seconds: int):
+    clean_title = (drama_title or "").strip()
+    if not clean_title or int(duration_seconds or 0) <= 0:
+        return
+    key = f"{DUR_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": key,
+            "cover_file_id": str(int(duration_seconds)),
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(payload).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+    except Exception:
+        pass
+
+
+def get_drama_duration_from_db(drama_title: str) -> int:
+    clean_title = (drama_title or "").strip()
+    if not clean_title:
+        return 0
+    key = f"{DUR_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            val = str(res.data[0]["cover_file_id"]).strip()
+            if val.isdigit():
+                return int(val)
+    except Exception:
+        pass
+    return 0
+
+
+def save_drama_gif_in_db(drama_title: str, gif_bytes: bytes) -> bool:
+    clean_title = (drama_title or "").strip()
+    if not clean_title or not gif_bytes:
+        return False
+
+    key = f"{GIF_STORE_PREFIX}{clean_title}"
+    drama_code = ensure_drama_code(clean_title)
+    try:
+        bio = io.BytesIO(gif_bytes)
+        bio.name = "preview.gif"
+        sent_gif = bot.send_animation(
+            chat_id=CHANNEL_ID_VALUE,
+            animation=bio,
+            caption=f"🎞️ GIF Preview៖ {clean_title} [{drama_code}]",
+        )
+        gif_file_id = None
+        if getattr(sent_gif, "animation", None):
+            gif_file_id = sent_gif.animation.file_id
+        elif getattr(sent_gif, "document", None):
+            gif_file_id = sent_gif.document.file_id
+
+        if not gif_file_id:
+            return False
+
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_channel_msg_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": key,
+            "cover_file_id": gif_file_id,
+            "cover_channel_msg_id": sent_gif.message_id,
+        }
+        if res.data:
+            old_mid = res.data[0].get("cover_channel_msg_id")
+            if old_mid and int(old_mid) != int(sent_gif.message_id):
+                safe_delete_message(CHANNEL_ID_VALUE, int(old_mid))
+            supabase.table("drama_covers").update(payload).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+        return True
+    except Exception:
+        log.exception("Could not save GIF preview for %s", clean_title)
+        return False
+
+
+def get_drama_gif_exists_in_db(drama_title: str) -> bool:
+    clean_title = (drama_title or "").strip()
+    if not clean_title:
+        return False
+    key = f"{GIF_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data and res.data[0].get("cover_file_id"))
+    except Exception:
+        return False
+
+
+# =====================================================
+# EPISODE COVER (REQ 3) & ALBUM PHOTOS (REQ 5) HELPERS
+# =====================================================
+
+def save_episode_cover_in_db(drama_title: str, ep_number: int, photo_bytes: bytes) -> bool:
+    """រក្សាទុករូបភាព Cover សម្រាប់ភាគនីមួយៗក្នុង drama_covers ក្រោមបុព្វបទ __EPCOV__"""
+    clean_title = (drama_title or "").strip()
+    if not clean_title or int(ep_number or 0) < 1 or not photo_bytes:
+        return False
+
+    ep_num = int(ep_number)
+    key = f"{EP_COV_STORE_PREFIX}{clean_title}__{ep_num}"
+    drama_code = ensure_drama_code(clean_title)
+    try:
+        with Image.open(io.BytesIO(photo_bytes)) as im:
+            rgb = im.convert("RGB")
+            out = io.BytesIO()
+            out.name = f"ep_{ep_num}_cover.jpg"
+            rgb.save(out, format="JPEG", quality=88, optimize=True)
+            out.seek(0)
+
+        sent = bot.send_photo(
+            chat_id=CHANNEL_ID_VALUE,
+            photo=out,
+            caption=f"🖼️ Cover ភាគទី {ep_num}៖ {clean_title} [{drama_code}]",
+        )
+        if not getattr(sent, "photo", None):
+            return False
+
+        file_id = sent.photo[-1].file_id
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_channel_msg_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": key,
+            "cover_file_id": file_id,
+            "cover_channel_msg_id": sent.message_id,
+        }
+        if res.data:
+            old_mid = res.data[0].get("cover_channel_msg_id")
+            if old_mid and int(old_mid) != int(sent.message_id):
+                safe_delete_message(CHANNEL_ID_VALUE, int(old_mid))
+            supabase.table("drama_covers").update(payload).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+        return True
+    except Exception:
+        log.exception("Failed to save episode cover for %s ep %s", clean_title, ep_num)
+        return False
+
+
+def get_drama_album_count_from_db(drama_title: str) -> int:
+    clean_title = (drama_title or "").strip()
+    if not clean_title:
+        return 0
+    keys = [f"{ALBUM_STORE_PREFIX}{clean_title}__{i}" for i in (1, 2, 3)]
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_file_id")
+            .in_("drama_title", keys)
+            .execute()
+        )
+        return len([r for r in (res.data or []) if r.get("cover_file_id")])
+    except Exception:
+        return 0
+
+
+def save_drama_album_slot_in_db(drama_title: str, slot_index: int, photo_bytes: bytes) -> bool:
+    """រក្សាទុករូបភាព Album ទី 1, 2 ឬ 3 សម្រាប់រឿង"""
+    clean_title = (drama_title or "").strip()
+    slot = int(slot_index)
+    if not clean_title or slot not in (1, 2, 3) or not photo_bytes:
+        return False
+
+    key = f"{ALBUM_STORE_PREFIX}{clean_title}__{slot}"
+    drama_code = ensure_drama_code(clean_title)
+    try:
+        with Image.open(io.BytesIO(photo_bytes)) as im:
+            rgb = im.convert("RGB")
+            out = io.BytesIO()
+            out.name = f"album_{slot}.jpg"
+            rgb.save(out, format="JPEG", quality=90, optimize=True)
+            out.seek(0)
+
+        sent = bot.send_photo(
+            chat_id=CHANNEL_ID_VALUE,
+            photo=out,
+            caption=f"📸 រូប Album ({slot}/3)៖ {clean_title} [{drama_code}]",
+        )
+        if not getattr(sent, "photo", None):
+            return False
+
+        file_id = sent.photo[-1].file_id
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_channel_msg_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": key,
+            "cover_file_id": file_id,
+            "cover_channel_msg_id": sent.message_id,
+        }
+        if res.data:
+            old_mid = res.data[0].get("cover_channel_msg_id")
+            if old_mid and int(old_mid) != int(sent.message_id):
+                safe_delete_message(CHANNEL_ID_VALUE, int(old_mid))
+            supabase.table("drama_covers").update(payload).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+        return True
+    except Exception:
+        log.exception("Failed to save album slot %s for %s", slot, clean_title)
+        return False
+
+
+def clear_drama_album_in_db(drama_title: str) -> int:
+    clean_title = (drama_title or "").strip()
+    if not clean_title:
+        return 0
+    keys = [f"{ALBUM_STORE_PREFIX}{clean_title}__{i}" for i in (1, 2, 3)]
+    deleted_count = 0
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title, cover_channel_msg_id")
+            .in_("drama_title", keys)
+            .execute()
+        )
+        for row in (res.data or []):
+            mid = row.get("cover_channel_msg_id")
+            if mid:
+                safe_delete_message(CHANNEL_ID_VALUE, int(mid))
+            deleted_count += 1
+        if res.data:
+            supabase.table("drama_covers").delete().in_("drama_title", keys).execute()
+    except Exception:
+        log.exception("Failed to clear drama album for %s", clean_title)
+    return deleted_count
+
+
+def save_drama_tags_in_db(drama_title: str, tags_text: str) -> bool:
+    clean_title = (drama_title or "").strip()
+    clean_tags = (tags_text or "").strip()
+    key = f"{TAGS_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if not clean_tags:
+            if res.data:
+                supabase.table("drama_covers").delete().eq("drama_title", key).execute()
+            return True
+        payload = {
+            "drama_title": key,
+            "cover_file_id": clean_tags,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(payload).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+        return True
+    except Exception:
+        log.exception("Could not save drama tags")
+        return False
+
+
+def get_drama_tags_from_db(drama_title: str) -> str:
+    clean_title = (drama_title or "").strip()
+    key = f"{TAGS_STORE_PREFIX}{clean_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            return str(res.data[0]["cover_file_id"]).strip()
+    except Exception:
+        pass
+    return ""
+
+
+def resolve_drama_title_or_code(input_text: str) -> str:
+    raw = parse_drama_title(input_text)
+    if not raw:
+        return ""
+    if raw.startswith("🔥 "):
+        raw = raw[2:].strip()
+    upper = raw.upper()
+    if re.match(r"^XF-\d+$", upper) or (raw.isdigit() and len(raw) == 6):
+        target_code = upper if upper.startswith("XF-") else f"XF-{int(raw):06d}"
+        code_map = get_all_codes_map_from_db()
+        for title, code in code_map.items():
+            if code.upper() == target_code:
+                return title
+    return raw
+
+
+# =====================================================
+# AUTO COVER EXTRACTOR (3-5 FRAMES) & GIF PREVIEW (3-5s)
+# =====================================================
+
+def build_gif_from_pil_frames(pil_frames: list[Image.Image], frame_duration_ms: int = 140) -> Optional[bytes]:
+    if not pil_frames:
+        return None
+    try:
+        processed = []
+        target_w = 320
+        for im in pil_frames:
+            rgb = im.convert("RGB")
+            w, h = rgb.size
+            if w > 0 and h > 0:
+                target_h = max(180, int(h * (target_w / w)))
+                resized = rgb.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                quantized = resized.quantize(colors=128, method=Image.Quantize.FASTOCTREE)
+                processed.append(quantized)
+        if not processed:
+            return None
+        out = io.BytesIO()
+        processed[0].save(
+            out,
+            format="GIF",
+            save_all=True,
+            append_images=processed[1:],
+            duration=frame_duration_ms,
+            loop=0,
+            optimize=True,
+        )
+        return out.getvalue()
+    except Exception:
+        log.exception("Failed to assemble GIF from PIL frames")
+        return None
+
+
+def generate_fallback_frames_and_gif_from_image(base_img_bytes: bytes) -> tuple[list[bytes], Optional[bytes]]:
+    frames_bytes = []
+    gif_bytes = None
+    try:
+        with Image.open(io.BytesIO(base_img_bytes)) as src:
+            base = src.convert("RGB")
+
+        variations = [
+            base,
+            ImageEnhance.Color(ImageEnhance.Contrast(base).enhance(1.12)).enhance(1.18),
+            ImageEnhance.Brightness(ImageEnhance.Contrast(base).enhance(1.15)).enhance(1.06),
+        ]
+        w, h = base.size
+        if w > 40 and h > 40:
+            crop_box = (int(w * 0.06), int(h * 0.06), int(w * 0.94), int(h * 0.94))
+            variations.append(base.crop(crop_box).resize((w, h), Image.Resampling.LANCZOS))
+
+        for var_im in variations[:4]:
+            buf = io.BytesIO()
+            var_im.save(buf, format="JPEG", quality=90)
+            frames_bytes.append(buf.getvalue())
+
+        anim_frames = []
+        steps = 14
+        for i in range(steps):
+            scale = i / float(steps - 1) * 0.10
+            dx = int(w * scale * 0.5)
+            dy = int(h * scale * 0.5)
+            cropped = base.crop((dx, dy, w - dx, h - dy)).resize((w, h), Image.Resampling.LANCZOS)
+            anim_frames.append(cropped)
+        full_loop = anim_frames + list(reversed(anim_frames[1:-1]))
+        gif_bytes = build_gif_from_pil_frames(full_loop, frame_duration_ms=145)
+    except Exception:
+        log.exception("Fallback frame/GIF generation failed")
+
+    return frames_bytes, gif_bytes
+
+
+def extract_single_frame_from_video_message(message) -> Optional[bytes]:
+    """ទាញយករូបភាព ១ សន្លឹកពីវីដេអូសម្រាប់ធ្វើជា Cover ភាគរឿង (Episode Cover)"""
+    thumb_file_id = None
+    file_id = None
+    file_size = 0
+
+    if message.content_type == "video" and getattr(message, "video", None):
+        v = message.video
+        file_id = v.file_id
+        file_size = int(v.file_size or 0)
+        if getattr(v, "thumbnail", None):
+            thumb_file_id = v.thumbnail.file_id
+        elif getattr(v, "thumb", None):
+            thumb_file_id = v.thumb.file_id
+    elif message.content_type == "document" and getattr(message, "document", None):
+        d = message.document
+        file_id = d.file_id
+        file_size = int(d.file_size or 0)
+        if getattr(d, "thumbnail", None):
+            thumb_file_id = d.thumbnail.file_id
+        elif getattr(d, "thumb", None):
+            thumb_file_id = d.thumb.file_id
+
+    if thumb_file_id:
+        try:
+            t_info = bot.get_file(thumb_file_id)
+            t_bytes = bot.download_file(t_info.file_path)
+            if t_bytes:
+                return t_bytes
+        except Exception:
+            pass
+
+    if file_id and (file_size == 0 or file_size <= 19_800_000) and cv2 is not None:
+        tmp_path = None
+        try:
+            f_info = bot.get_file(file_id)
+            v_bytes = bot.download_file(f_info.file_path)
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                tmp.write(v_bytes)
+                tmp_path = tmp.name
+
+            cap = cv2.VideoCapture(tmp_path)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            if total_frames > 2:
+                target_idx = max(0, min(total_frames - 1, int(total_frames * 0.25)))
+                cap.set(cv2.CAP_PROP_POS_FRAMES, target_idx)
+                ok, frame = cap.read()
+                if ok and frame is not None:
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_img = Image.fromarray(rgb)
+                    buf = io.BytesIO()
+                    pil_img.save(buf, format="JPEG", quality=90)
+                    cap.release()
+                    return buf.getvalue()
+            cap.release()
+        except Exception:
+            pass
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
+    return None
+
+
+def extract_video_frames_and_gif(message) -> tuple[list[bytes], Optional[bytes]]:
+    file_id = None
+    file_size = 0
+    thumb_file_id = None
+
+    if message.content_type == "video" and getattr(message, "video", None):
+        v = message.video
+        file_id = v.file_id
+        file_size = int(v.file_size or 0)
+        if getattr(v, "thumbnail", None):
+            thumb_file_id = v.thumbnail.file_id
+        elif getattr(v, "thumb", None):
+            thumb_file_id = v.thumb.file_id
+    elif message.content_type == "document" and getattr(message, "document", None):
+        d = message.document
+        file_id = d.file_id
+        file_size = int(d.file_size or 0)
+        if getattr(d, "thumbnail", None):
+            thumb_file_id = d.thumbnail.file_id
+        elif getattr(d, "thumb", None):
+            thumb_file_id = d.thumb.file_id
+
+    frames_bytes = []
+    gif_bytes = None
+
+    if file_id and (file_size == 0 or file_size <= 19_800_000) and cv2 is not None:
+        tmp_path = None
+        try:
+            f_info = bot.get_file(file_id)
+            v_bytes = bot.download_file(f_info.file_path)
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                tmp.write(v_bytes)
+                tmp_path = tmp.name
+
+            cap = cv2.VideoCapture(tmp_path)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
+            if fps <= 1 or fps > 120:
+                fps = 25.0
+
+            if total_frames > 5:
+                ratios = [0.15, 0.38, 0.62, 0.85]
+                for r in ratios:
+                    target_idx = max(0, min(total_frames - 1, int(total_frames * r)))
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, target_idx)
+                    ok, frame = cap.read()
+                    if ok and frame is not None:
+                        rgb = cv2.cvtColor(frame, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if False else cv2.COLOR_BGR2RGB)
+                        pil_img = Image.fromarray(rgb)
+                        buf = io.BytesIO()
+                        pil_img.save(buf, format="JPEG", quality=92)
+                        frames_bytes.append(buf.getvalue())
+
+                gif_start_frame = int(total_frames * 0.20)
+                gif_span_frames = min(int(fps * 4.0), max(10, total_frames - gif_start_frame - 1))
+                num_gif_samples = 28
+                step = max(1, gif_span_frames // num_gif_samples)
+
+                pil_gif_frames = []
+                for i in range(num_gif_samples):
+                    f_idx = min(total_frames - 1, gif_start_frame + i * step)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
+                    ok, frame = cap.read()
+                    if ok and frame is not None:
+                        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        pil_gif_frames.append(Image.fromarray(rgb))
+
+                gif_bytes = build_gif_from_pil_frames(pil_gif_frames, frame_duration_ms=140)
+
+            cap.release()
+        except Exception:
+            log.warning("Direct video CV2 extraction skipped/failed, trying thumbnail fallback.")
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
+    if (not frames_bytes or not gif_bytes) and thumb_file_id:
+        try:
+            t_info = bot.get_file(thumb_file_id)
+            t_bytes = bot.download_file(t_info.file_path)
+            fb_frames, fb_gif = generate_fallback_frames_and_gif_from_image(t_bytes)
+            if not frames_bytes:
+                frames_bytes = fb_frames
+            if not gif_bytes:
+                gif_bytes = fb_gif
+        except Exception:
+            log.warning("Thumbnail fallback failed")
+
+    return frames_bytes, gif_bytes
+
+
+# =====================================================
+# USER ANALYTICS & NEW DRAMA NOTIFICATION (REQ 7: TO USER BOT CHAT ONLY)
+# =====================================================
+
+def get_notification_stats_from_db() -> dict:
+    default_stats = {
+        "total_broadcasts": 0,
+        "total_delivered": 0,
+        "total_failed": 0,
+        "last_drama": "មិនទាន់មាន",
+        "last_sent_ok": 0,
+        "last_failed": 0,
+        "last_time": "មិនទាន់មាន",
+    }
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", NOTIF_STATS_KEY)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            parsed = json.loads(res.data[0]["cover_file_id"])
+            if isinstance(parsed, dict):
+                default_stats.update(parsed)
+    except Exception:
+        pass
+    return default_stats
+
+
+def save_notification_stats_to_db(drama_title: str, sent_ok: int, failed_count: int):
+    stats = get_notification_stats_from_db()
+    stats["total_broadcasts"] = int(stats.get("total_broadcasts", 0)) + 1
+    stats["total_delivered"] = int(stats.get("total_delivered", 0)) + int(sent_ok)
+    stats["total_failed"] = int(stats.get("total_failed", 0)) + int(failed_count)
+    stats["last_drama"] = drama_title
+    stats["last_sent_ok"] = int(sent_ok)
+    stats["last_failed"] = int(failed_count)
+    stats["last_time"] = get_cambodia_now().strftime("%d-%m-%Y %H:%M")
+
+    serialized = json.dumps(stats, ensure_ascii=False)
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", NOTIF_STATS_KEY)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": NOTIF_STATS_KEY,
+            "cover_file_id": serialized,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(payload).eq("drama_title", NOTIF_STATS_KEY).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+    except Exception:
+        log.exception("Failed to save notification stats")
+
+
+def get_all_started_user_ids() -> list[int]:
+    uids = set()
+    try:
+        res = supabase.table("user_history").select("user_id, drama_title").execute()
+        for r in (res.data or []):
+            uid = r.get("user_id")
+            t = str(r.get("drama_title") or "")
+            if uid is not None:
+                uid_int = int(uid)
+                if uid_int > 100000 and not (t.startswith("__RATE__") and uid_int < 100000000):
+                    uids.add(uid_int)
+    except Exception:
+        log.exception("Could not fetch started user IDs")
+    return sorted(list(uids))
+
+
+def compute_admin_user_analytics() -> dict:
+    today_int = get_cambodia_date_int()
+    seven_days_ago_int = int((get_cambodia_now() - timedelta(days=7)).strftime("%Y%m%d"))
+    today_iso_prefix = get_cambodia_now().strftime("%Y-%m-%d")
+
+    all_users = set()
+    new_users_today = set()
+    new_users_7d = set()
+    active_today = set()
+
+    try:
+        res = supabase.table("user_history").select("user_id, drama_title, last_ep, updated_at").execute()
+        for r in (res.data or []):
+            uid = r.get("user_id")
+            if not uid:
+                continue
+            uid_int = int(uid)
+            t = str(r.get("drama_title") or "")
+            if t.startswith("__RATE__") and uid_int < 100000000:
+                continue
+
+            all_users.add(uid_int)
+
+            if t == USER_START_KEY:
+                join_date_int = int(r.get("last_ep") or 0)
+                if join_date_int == today_int:
+                    new_users_today.add(uid_int)
+                if join_date_int >= seven_days_ago_int:
+                    new_users_7d.add(uid_int)
+
+            updated_raw = str(r.get("updated_at") or "")
+            if updated_raw.startswith(today_iso_prefix):
+                active_today.add(uid_int)
+    except Exception:
+        log.exception("Error computing user analytics")
+
+    total_dramas = len(get_all_drama_titles())
+    total_episodes = 0
+    try:
+        ep_res = supabase.table("episodes").select("ep_number").execute()
+        total_episodes = len(ep_res.data or [])
+    except Exception:
+        pass
+
+    notif_stats = get_notification_stats_from_db()
+
+    return {
+        "total_users": len(all_users),
+        "new_users_today": len(new_users_today),
+        "new_users_7d": len(new_users_7d),
+        "active_users_today": len(active_today),
+        "total_dramas": total_dramas,
+        "total_episodes": total_episodes,
+        "notif_stats": notif_stats,
+    }
+
+
+def create_notification_watch_token_for_user_bot(drama_title: str) -> Optional[str]:
+    """Create a callback token compatible with the User Bot notification handler."""
+    try:
+        episodes_res = (
+            supabase.table("episodes")
+            .select("ep_number, channel_msg_id")
+            .eq("drama_title", drama_title)
+            .order("ep_number", desc=False)
+            .limit(1000)
+            .execute()
+        )
+        first_video_ep = next(
+            (
+                row for row in (episodes_res.data or [])
+                if row.get("channel_msg_id") and int(row.get("ep_number") or 0) > 0
+            ),
+            None,
+        )
+        if not first_video_ep:
+            log.warning("No available video episode for notification: %s", drama_title)
+            return None
+
+        token = secrets.token_hex(5)
+        key = f"__NOTIF_WATCH__{token}"
+        payload = {
+            "drama_title": key,
+            "cover_file_id": json.dumps(
+                {
+                    "drama_title": drama_title,
+                    "ep_number": int(first_video_ep["ep_number"]),
+                },
+                ensure_ascii=False,
+            ),
+            "cover_channel_msg_id": 0,
+        }
+        supabase.table("drama_covers").upsert(
+            payload, on_conflict="drama_title"
+        ).execute()
+        return token
+    except Exception:
+        log.exception("Could not create notification watch token for %s", drama_title)
+        return None
+
+
+def enqueue_notification_for_user_bot(
+    drama_title: str,
+    admin_chat_id: int,
+    custom_cover_msg_id: Optional[int] = None,
+    custom_cover_file_id: Optional[str] = None,
+) -> bool:
+    """បញ្ជូន Queue ឱ្យ User Bot (backenuser.py) ជាអ្នកផ្ញើចូល User Bot Chat ផ្ទាល់ (គាំទ្ររូប Cover ថ្មី ឬ Cover ស្រាប់)"""
+    try:
+        job = {
+            "drama_title": drama_title,
+            "admin_chat_id": int(admin_chat_id),
+            "custom_cover_msg_id": int(custom_cover_msg_id) if custom_cover_msg_id else None,
+            "custom_cover_file_id": custom_cover_file_id or None,
+            "timestamp": time.time(),
+        }
+        serialized = json.dumps(job, ensure_ascii=False)
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", CFG_NOTIF_QUEUE_KEY)
+            .limit(1)
+            .execute()
+        )
+        payload = {
+            "drama_title": CFG_NOTIF_QUEUE_KEY,
+            "cover_file_id": serialized,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(payload).eq("drama_title", CFG_NOTIF_QUEUE_KEY).execute()
+        else:
+            supabase.table("drama_covers").insert(payload).execute()
+
+        base_url = get_resolved_mini_app_url()
+        if base_url:
+            try:
+                requests.post(
+                    f"{base_url}/api/internal/broadcast-notification",
+                    json={
+                        "drama_title": drama_title,
+                        "admin_chat_id": int(admin_chat_id),
+                        "custom_cover_msg_id": int(custom_cover_msg_id) if custom_cover_msg_id else None,
+                        "custom_cover_file_id": custom_cover_file_id or None,
+                    },
+                    timeout=5,
+                )
+            except Exception:
+                pass
+        return True
+    except Exception:
+        log.exception("Failed to enqueue notification for User Bot")
+        return False
+
+
+def broadcast_new_drama_notification_async(
+    drama_title: str,
+    admin_chat_id: int,
+    custom_cover_bytes: Optional[bytes] = None,
+    custom_cover_msg_id: Optional[int] = None,
+):
+    """
+    Point 3.2: ផ្ញើ Notification រឿងថ្មីទៅកាន់ User Bot Chat ជារូប Cover (អាចប្រើរូប Cover ដែល Admin ទើប Upload ថ្មី
+    ឬរូប Cover រឿងដែលមានស្រាប់) ភ្ជាប់ជាមួយ ចំណងជើងរឿង + លេខកូដ (ឧ. XF-000001) និងប៊ូតុង ▶️ មើលឥឡូវនេះ។
+    """
+    def _worker():
+        try:
+            real_user_bot_token = get_resolved_user_bot_token()
+            drama_code = ensure_drama_code(drama_title)
+
+            # បើ Admin បាន Upload រូប Cover ថ្មីសម្រាប់ Notification បង្ហោះចូល Channel ដើម្បីទុក Message ID ឱ្យ User Bot ប្រើបានដែរ
+            notif_channel_msg_id = int(custom_cover_msg_id) if custom_cover_msg_id else None
+            if custom_cover_bytes and not notif_channel_msg_id:
+                try:
+                    bio_ch = io.BytesIO(custom_cover_bytes)
+                    bio_ch.name = "notif_cover.jpg"
+                    sent_ch = bot.send_photo(
+                        chat_id=CHANNEL_ID_VALUE,
+                        photo=bio_ch,
+                        caption=f"🔔 Notification Cover៖ {drama_title} [{drama_code}]",
+                    )
+                    if sent_ch:
+                        notif_channel_msg_id = int(sent_ch.message_id)
+                except Exception:
+                    log.warning("Could not upload custom notification cover to channel")
+
+            # ប្រសិនបើមិនទាន់មាន USER_BOT_TOKEN ដាច់ដោយឡែកទេ បញ្ជូនទៅឱ្យ backenuser.py ផ្ញើតាម User Bot ផ្ទាល់
+            if not real_user_bot_token:
+                ok = enqueue_notification_for_user_bot(
+                    drama_title=drama_title,
+                    admin_chat_id=admin_chat_id,
+                    custom_cover_msg_id=notif_channel_msg_id,
+                )
+                if ok:
+                    bot.send_message(
+                        admin_chat_id,
+                        f"📨 សំណើផ្ញើ Notification សម្រាប់រឿង «{drama_title}» ({drama_code}) ត្រូវបានបញ្ជូនទៅកាន់ **User Bot** រួចរាល់!\n"
+                        "User Bot កំពុងផ្ញើរូប Cover ភ្ជាប់ចំណងជើង និង ID Code ចូលទៅកាន់ប្រអប់ឆាតរបស់អ្នកប្រើប្រាស់គ្រប់គ្នា។",
+                        reply_markup=main_menu_keyboard(),
+                    )
+                else:
+                    bot.send_message(
+                        admin_chat_id,
+                        "⚠️ សូមបើកដំណើរការ User Bot (backenuser.py) ឬកំណត់ USER_BOT_TOKEN ដើម្បីផ្ញើ Notification ទៅកាន់ User Bot Chat។",
+                        reply_markup=main_menu_keyboard(),
+                    )
+                return
+
+            user_bot_client = telebot.TeleBot(real_user_bot_token, threaded=False)
+            user_ids = get_all_started_user_ids()
+            dur = get_drama_duration_from_db(drama_title)
+            dur_str = f" | ⏱️ រយៈពេល៖ {format_video_duration(dur)}" if dur > 0 else ""
+
+            cov_res = (
+                supabase.table("drama_covers")
+                .select("cover_file_id, cover_channel_msg_id")
+                .eq("drama_title", drama_title)
+                .limit(1)
+                .execute()
+            )
+            db_cover_msg_id = cov_res.data[0].get("cover_channel_msg_id") if cov_res.data else None
+            admin_cover_file_id = cov_res.data[0].get("cover_file_id") if cov_res.data else None
+
+            cover_msg_id = notif_channel_msg_id or (int(db_cover_msg_id) if db_cover_msg_id else None)
+
+            # ទាញយករូប Cover ជា Bytes (ប្រើរូបថ្មីដែល Admin Upload មុនគេ បើគ្មានទើបទាញពី Cover រឿងដែលមានស្រាប់)
+            cover_bytes = custom_cover_bytes
+            if not cover_bytes and admin_cover_file_id:
+                try:
+                    f_info = bot.get_file(admin_cover_file_id)
+                    cover_bytes = bot.download_file(f_info.file_path)
+                except Exception:
+                    cover_bytes = None
+
+            # ប៊ូតុងមើលវីដេអូ (▶️ មើលឥឡូវនេះ) រក្សាទុកដដែល
+            markup = InlineKeyboardMarkup()
+            watch_token = create_notification_watch_token_for_user_bot(drama_title)
+            if watch_token:
+                markup.add(
+                    InlineKeyboardButton(
+                        "▶️ មើលឥឡូវនេះ",
+                        callback_data=f"notif_watch_{watch_token}",
+                    )
+                )
+            if not markup.keyboard:
+                markup = None
+
+            escaped_title = html.escape(drama_title)
+            escaped_code = html.escape(drama_code or "XF-000001")
+            caption_text = (
+                f"🔥 <b>រឿងថ្មីទើបមកដល់ក្នុង {CHANNEL_DISPLAY_NAME}!</b>\n"
+                f"🎬 ចំណងជើង៖ <b>{escaped_title}</b>\n"
+                f"🆔 លេខកូដ៖ <code>{escaped_code}</code>{dur_str}\n"
+                f"👇 ចុចប៊ូតុងខាងក្រោម ដើម្បីទទួលវីដេអូ!"
+            )
+
+            sent_ok = 0
+            failed_count = 0
+            cached_user_bot_photo_id = None
+
+            for uid in user_ids:
+                delivered = False
+
+                if cached_user_bot_photo_id:
+                    try:
+                        user_bot_client.send_photo(
+                            chat_id=uid,
+                            photo=cached_user_bot_photo_id,
+                            caption=caption_text,
+                            parse_mode="HTML",
+                            reply_markup=markup,
+                        )
+                        delivered = True
+                    except Exception:
+                        delivered = False
+
+                if not delivered and cover_bytes:
+                    try:
+                        bio = io.BytesIO(cover_bytes)
+                        bio.name = "cover.jpg"
+                        sent_msg = user_bot_client.send_photo(
+                            chat_id=uid,
+                            photo=bio,
+                            caption=caption_text,
+                            parse_mode="HTML",
+                            reply_markup=markup,
+                        )
+                        if getattr(sent_msg, "photo", None):
+                            cached_user_bot_photo_id = sent_msg.photo[-1].file_id
+                        delivered = True
+                    except Exception:
+                        delivered = False
+
+                if not delivered and cover_msg_id:
+                    try:
+                        user_bot_client.copy_message(
+                            chat_id=uid,
+                            from_chat_id=CHANNEL_ID_VALUE,
+                            message_id=int(cover_msg_id),
+                            caption=caption_text,
+                            parse_mode="HTML",
+                            reply_markup=markup,
+                        )
+                        delivered = True
+                    except Exception:
+                        delivered = False
+
+                if not delivered:
+                    try:
+                        user_bot_client.send_message(
+                            chat_id=uid,
+                            text=caption_text,
+                            parse_mode="HTML",
+                            reply_markup=markup,
+                        )
+                        delivered = True
+                    except Exception:
+                        delivered = False
+
+                if delivered:
+                    sent_ok += 1
+                else:
+                    failed_count += 1
+
+                time.sleep(0.05)
+
+            save_notification_stats_to_db(drama_title, sent_ok, failed_count)
+
+            bot.send_message(
+                admin_chat_id,
+                f"✅ <b>ការផ្ញើ Notification ទៅកាន់ User Bot Chat ត្រូវបានបញ្ចប់!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                f"👥 អ្នកប្រើប្រាស់សរុប៖ {len(user_ids)} នាក់\n"
+                f"📨 ផ្ញើជោគជ័យ (ក្នុង User Bot)៖ {sent_ok} នាក់\n"
+                f"⚠️ បរាជ័យ / Block Bot៖ {failed_count} នាក់",
+                parse_mode="HTML",
+                reply_markup=main_menu_keyboard(),
+            )
+        except Exception:
+            log.exception("Broadcast notification worker failed")
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+# =====================================================
+# WEBHOOK SELF-HEALING HELPER
+# =====================================================
+
+def ensure_webhook_active(force=False):
+    global last_webhook_check
+    if not WEBHOOK_URL.startswith("https://"):
+        return
+
+    now = time.time()
+    if not force and (now - last_webhook_check < 60):
+        return
+
+    last_webhook_check = now
+    try:
+        info = bot.get_webhook_info()
+        if info.url != WEBHOOK_URL:
+            bot.set_webhook(
+                url=WEBHOOK_URL,
+                secret_token=WEBHOOK_SECRET,
+                drop_pending_updates=False,
+            )
+            log.info("Webhook automatically restored to %s", WEBHOOK_URL)
+    except Exception:
+        log.exception("Failed to verify/restore webhook")
+
+
+# =====================================================
+# CLEAN CHAT HELPERS & KEYBOARDS
+# =====================================================
+
+def main_menu_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_NEW_DRAMA),
+        KeyboardButton(BTN_ADD_EP),
+        KeyboardButton(BTN_EDIT_DRAMA),
+        KeyboardButton(BTN_DELETE_DRAMA),
+        KeyboardButton(BTN_TOP_TRENDING),
+        KeyboardButton(BTN_NOTIFY_DRAMA),
+        KeyboardButton(BTN_CHANNEL_SETTINGS),
+        KeyboardButton(BTN_USER_ANALYTICS),
+        KeyboardButton(BTN_CHECK_DRAMA),
+        KeyboardButton(BTN_MANAGE_ADMINS),
+    )
+    return markup
+
+
+def channel_settings_menu_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_SET_REQ_CHANNEL_ID),
+        KeyboardButton(BTN_SET_REQ_CHANNEL_LINK),
+        KeyboardButton(BTN_SET_REQ_CHANNEL_BOTH),
+        KeyboardButton(BTN_VIEW_REQ_CHANNEL),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def cancel_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(KeyboardButton(BTN_CANCEL))
+    return markup
+
+
+def cover_selection_keyboard(num_frames: int = 0):
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    frame_btns = [
+        BTN_PICK_FRAME_1,
+        BTN_PICK_FRAME_2,
+        BTN_PICK_FRAME_3,
+        BTN_PICK_FRAME_4,
+        BTN_PICK_FRAME_5,
+    ][: max(0, min(5, num_frames))]
+    if frame_btns:
+        markup.add(*[KeyboardButton(b) for b in frame_btns])
+    markup.row(KeyboardButton(BTN_UPLOAD_CUSTOM_COVER))
+    markup.row(KeyboardButton(BTN_CANCEL))
+    return markup
+
+
+def album_upload_keyboard(uploaded_count: int = 0):
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    if uploaded_count > 0:
+        markup.add(KeyboardButton(BTN_DONE_ALBUM))
+    else:
+        markup.add(KeyboardButton(BTN_SKIP_ALBUM))
+    markup.add(KeyboardButton(BTN_CANCEL))
+    return markup
+
+
+def edit_album_action_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    markup.add(
+        KeyboardButton(BTN_UPLOAD_NEW_ALBUM),
+        KeyboardButton(BTN_CLEAR_ALBUM),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def top_trending_menu_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_ADD_TRENDING),
+        KeyboardButton(BTN_REMOVE_TRENDING),
+        KeyboardButton(BTN_LIST_TRENDING),
+        KeyboardButton(BTN_CLEAR_TRENDING),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def notify_prompt_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    markup.add(
+        KeyboardButton(BTN_SEND_NOTIF_NOW),
+        KeyboardButton(BTN_NOTIF_UPLOAD_COVER),
+        KeyboardButton(BTN_SKIP_NOTIF),
+    )
+    return markup
+
+
+def skip_synopsis_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_SKIP_SYNOPSIS),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def lang_choice_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_LANG_DUB),
+        KeyboardButton(BTN_LANG_SUB),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def first_episode_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton("1"),
+        KeyboardButton(BTN_ONE_SHOT),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def edit_menu_keyboard():
+    """Point 3.1: Removed BTN_EDIT_LANG (និយាយខ្មែរ / Sub ខ្មែរ) from Admin Edit Menu."""
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_EDIT_TITLE),
+        KeyboardButton(BTN_EDIT_EP),
+        KeyboardButton(BTN_EDIT_COVER),
+        KeyboardButton(BTN_EDIT_EP_COVER),
+        KeyboardButton(BTN_EDIT_ALBUM),
+        KeyboardButton(BTN_EDIT_GIF),
+        KeyboardButton(BTN_EDIT_CATEGORY),
+        KeyboardButton(BTN_EDIT_SYNOPSIS),
+        KeyboardButton(BTN_EDIT_TAGS),
+        KeyboardButton(BTN_MANAGE_CATEGORY),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def manage_admins_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_ADD_ADMIN),
+        KeyboardButton(BTN_REMOVE_ADMIN),
+        KeyboardButton(BTN_LIST_ADMINS),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def delete_menu_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton(BTN_DEL_ALL_DRAMA),
+        KeyboardButton(BTN_DEL_SINGLE_EP),
+        KeyboardButton(BTN_CANCEL),
+    )
+    return markup
+
+
+def clean_category_text(text):
+    if not text:
+        return ""
+    for prefix in ["🇨🇳 ", "🇰🇭 ", "🤖 ", "🇰🇷 ", "✨ ", "🇨🇳", "🇰🇭", "🤖", "🇰🇷", "✨"]:
+        text = text.replace(prefix, "")
+    c = text.strip()
+    if c == "រឿងភាគចិន":
+        return "រឿងចិន"
+    if c == "រឿងភាគខ្មែរ":
+        return "រឿងខ្មែរ"
+    if c == "រឿងភាគកូរ៉េ":
+        return "រឿងកូរ៉េ"
+    return c
+
+
+def get_category_variants(cat_name):
+    clean = clean_category_text(cat_name)
+    variants = {cat_name.strip(), clean}
+    mapping = {
+        "រឿងចិន": ["🇨🇳 រឿងចិន", "🇨🇳រឿងចិន", "រឿងភាគចិន"],
+        "រឿងខ្មែរ": ["🇰🇭 រឿងខ្មែរ", "🇰🇭រឿងខ្មែរ", "រឿងភាគខ្មែរ"],
+        "រឿងAI": ["🤖 រឿងAI", "🤖រឿងAI", "រឿង AI"],
+        "រឿងកូរ៉េ": ["🇰🇷 រឿងកូរ៉េ", "🇰🇷រឿងកូរ៉េ", "រឿងភាគកូរ៉េ"],
+        "ផ្សេងៗ": ["✨ ផ្សេងៗ", "✨ផ្សេងៗ"],
+    }
+    if clean in mapping:
+        variants.update(mapping[clean])
+    return list(variants)
+
+
+def save_standalone_category_in_db(cat_name):
+    clean = clean_category_text(cat_name)
+    if not clean:
+        return False
+    key = f"{CAT_STORE_PREFIX}{clean}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            supabase.table("drama_covers").insert({
+                "drama_title": key,
+                "cover_file_id": "CATEGORY_ITEM",
+                "cover_channel_msg_id": 0,
+            }).execute()
+        return True
+    except Exception:
+        log.exception("Could not save standalone category")
+        return False
+
+
+def save_drama_synopsis_in_db(drama_title, synopsis_text):
+    key = f"{SYN_STORE_PREFIX}{drama_title}"
+    clean_syn = (synopsis_text or "").strip()
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if not clean_syn:
+            if res.data:
+                supabase.table("drama_covers").delete().eq("drama_title", key).execute()
+            return True
+
+        data = {
+            "drama_title": key,
+            "cover_file_id": clean_syn,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(data).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(data).execute()
+        return True
+    except Exception:
+        log.exception("Could not save drama synopsis")
+        return False
+
+
+def get_drama_synopsis_from_db(drama_title):
+    key = f"{SYN_STORE_PREFIX}{drama_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            return str(res.data[0]["cover_file_id"]).strip()
+    except Exception:
+        pass
+    return ""
+
+
+def save_drama_lang_in_db(drama_title: str, lang_code: str):
+    key = f"{LANG_STORE_PREFIX}{drama_title}"
+    clean_code = "sub" if lang_code == "sub" else "dub"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        data = {
+            "drama_title": key,
+            "cover_file_id": clean_code,
+            "cover_channel_msg_id": 0,
+        }
+        if res.data:
+            supabase.table("drama_covers").update(data).eq("drama_title", key).execute()
+        else:
+            supabase.table("drama_covers").insert(data).execute()
+        return True
+    except Exception:
+        log.exception("Could not save drama language type")
+        return False
+
+
+def get_drama_lang_from_db(drama_title: str) -> str:
+    key = f"{LANG_STORE_PREFIX}{drama_title}"
+    try:
+        res = (
+            supabase.table("drama_covers")
+            .select("cover_file_id")
+            .eq("drama_title", key)
+            .limit(1)
+            .execute()
+        )
+        if res.data and res.data[0].get("cover_file_id"):
+            val = str(res.data[0]["cover_file_id"]).strip().lower()
+            return BTN_LANG_SUB if val == "sub" else BTN_LANG_DUB
+    except Exception:
+        pass
+    t_low = drama_title.lower()
+    if any(k in t_low for k in ["sub", "សាប់", "subtitle", "អក្សរខ្មែរ"]):
+        return f"{BTN_LANG_SUB} (ស្វ័យប្រវត្តិ)"
+    return f"{BTN_LANG_DUB} (លំនាំដើម)"
+
+
+def get_all_categories_from_db():
+    db_cats = set()
+    try:
+        res1 = supabase.table("episodes").select("category").execute()
+        for r in (res1.data or []):
+            raw_cat = r.get("category")
+            if raw_cat and str(raw_cat).strip():
+                cleaned = clean_category_text(str(raw_cat))
+                if cleaned:
+                    db_cats.add(cleaned)
+    except Exception:
+        log.exception("Failed to fetch categories from episodes")
+
+    try:
+        res2 = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .like("drama_title", f"{CAT_STORE_PREFIX}%")
+            .execute()
+        )
+        for r in (res2.data or []):
+            t = r.get("drama_title") or ""
+            if t.startswith(CAT_STORE_PREFIX):
+                cat_name = clean_category_text(t[len(CAT_STORE_PREFIX):])
+                if cat_name:
+                    db_cats.add(cat_name)
+    except Exception:
+        log.exception("Failed to fetch standalone categories")
+
+    return sorted(list(db_cats))
+
+
+def category_keyboard(include_add_new=True):
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    cats = get_all_categories_from_db()
+    buttons = [KeyboardButton(c) for c in cats]
+    if include_add_new:
+        buttons.append(KeyboardButton(BTN_ADD_NEW_CAT))
+    buttons.append(KeyboardButton(BTN_CANCEL))
+    markup.add(*buttons)
+    return markup
+
+
+def get_all_drama_titles():
+    titles = set()
+    try:
+        res1 = supabase.table("episodes").select("drama_title").execute()
+        for r in (res1.data or []):
+            t = (r.get("drama_title") or "").strip()
+            if t and not is_internal_key(t):
+                titles.add(t)
+    except Exception:
+        pass
+    try:
+        res2 = supabase.table("drama_covers").select("drama_title").execute()
+        for r in (res2.data or []):
+            t = (r.get("drama_title") or "").strip()
+            if t and not is_internal_key(t):
+                titles.add(t)
+    except Exception:
+        pass
+    return sorted(list(titles))
+
+
+def drama_pagination_keyboard(dramas, page=0, per_page=10, highlight_set: set = None):
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    total_pages = max(1, (len(dramas) + per_page - 1) // per_page)
+    page = max(0, min(page, total_pages - 1))
+
+    start = page * per_page
+    end = start + per_page
+    current_slice = dramas[start:end]
+
+    for i in range(0, len(current_slice), 2):
+        row_btns = []
+        for t in current_slice[i:i+2]:
+            label = f"🔥 {t}" if (highlight_set and t in highlight_set) else t
+            row_btns.append(KeyboardButton(label))
+        markup.row(*row_btns)
+
+    nav_btns = []
+    if page > 0:
+        nav_btns.append(KeyboardButton(BTN_PREV_PAGE))
+    if end < len(dramas):
+        nav_btns.append(KeyboardButton(BTN_NEXT_PAGE))
+    if nav_btns:
+        markup.row(*nav_btns)
+
+    markup.row(KeyboardButton(BTN_CANCEL))
+    return markup, page, total_pages
+
+
+def safe_delete_message(chat_id, message_id):
+    try:
+        bot.delete_message(chat_id, message_id)
+    except Exception:
+        pass
+
+
+def track_message_for_cleanup(user_id, message_id):
+    if user_id not in chat_cleanup_ids:
+        chat_cleanup_ids[user_id] = set()
+    chat_cleanup_ids[user_id].add(message_id)
+
+
+def clear_previous_messages(chat_id, user_id):
+    msg_ids = chat_cleanup_ids.get(user_id, set()).copy()
+    chat_cleanup_ids[user_id] = set()
+    for mid in msg_ids:
+        safe_delete_message(chat_id, mid)
+
+
+def send_clean_message(message, text, reply_markup=None, delete_user_msg=True):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+
+    sent = None
+    try:
+        sent = bot.send_message(chat_id, text, reply_markup=reply_markup)
+    except Exception:
+        log.exception("Could not send Telegram message")
+
+    if delete_user_msg:
+        safe_delete_message(chat_id, message.message_id)
+    else:
+        track_message_for_cleanup(user_id, message.message_id)
+
+    clear_previous_messages(chat_id, user_id)
+
+    if sent:
+        track_message_for_cleanup(user_id, sent.message_id)
+    return sent
+
+
+def send_frame_candidates_to_admin(chat_id: int, user_id: int, frames_list: list[bytes]):
+    if not frames_list:
+        return
+    try:
+        media_group = []
+        for idx, f_bytes in enumerate(frames_list[:5], start=1):
+            bio = io.BytesIO(f_bytes)
+            bio.name = f"frame_{idx}.jpg"
+            media_group.append(
+                InputMediaPhoto(
+                    media=bio,
+                    caption=f"🖼️ រូបទី {idx}",
+                )
+            )
+        sent_msgs = bot.send_media_group(chat_id=chat_id, media=media_group)
+        for m in (sent_msgs or []):
+            track_message_for_cleanup(user_id, m.message_id)
+    except Exception:
+        log.warning("Could not send media group frames, falling back to single photos")
+        for idx, f_bytes in enumerate(frames_list[:5], start=1):
+            try:
+                bio = io.BytesIO(f_bytes)
+                bio.name = f"frame_{idx}.jpg"
+                s = bot.send_photo(chat_id=chat_id, photo=bio, caption=f"🖼️ រូបទី {idx}")
+                track_message_for_cleanup(user_id, s.message_id)
+            except Exception:
+                pass
+
+
+# =====================================================
+# DATABASE & CHANNEL HELPERS
+# =====================================================
+
+def parse_drama_title(value):
+    if not value:
+        return ""
+    return " ".join(value.replace("_", " ").split()).strip()
+
+
+def is_valid_video(message):
+    if message.content_type == "video":
+        return True
+    if message.content_type == "document":
+        mime = getattr(message.document, "mime_type", "") or ""
+        return mime.startswith("video/")
+    return False
+
+
+def get_next_episode_number(drama_title):
+    result = (
+        supabase.table("episodes")
+        .select("ep_number")
+        .eq("drama_title", drama_title)
+        .order("ep_number", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        last_ep = result.data[0].get("ep_number") or 0
+        return int(last_ep) + 1
+    return 1
+
+
+def get_drama_category(drama_title):
+    result = (
+        supabase.table("episodes")
+        .select("category")
+        .eq("drama_title", drama_title)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        return result.data[0].get("category")
+    return None
+
+
+def find_episode(drama_title, ep_number):
+    result = (
+        supabase.table("episodes")
+        .select("*")
+        .eq("drama_title", drama_title)
+        .eq("ep_number", ep_number)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def save_episode(drama_title, ep_number, channel_msg_id, cover_url=None, category=None):
+    existing = find_episode(drama_title, ep_number)
+
+    data = {
+        "drama_title": drama_title,
+        "ep_number": ep_number,
+        "channel_msg_id": channel_msg_id,
+    }
+
+    if cover_url:
+        data["cover_url"] = cover_url
+    if category:
+        data["category"] = category
+        save_standalone_category_in_db(category)
+
+    if existing:
+        (
+            supabase.table("episodes")
+            .update(data)
+            .eq("drama_title", drama_title)
+            .eq("ep_number", ep_number)
+            .execute()
+        )
+    else:
+        supabase.table("episodes").insert(data).execute()
+
+    ensure_drama_code(drama_title)
+    ensure_drama_upload_date(drama_title)
+
+
+def save_cover(drama_title, cover_file_id, channel_msg_id):
+    result = (
+        supabase.table("drama_covers")
+        .select("drama_title, cover_channel_msg_id")
+        .eq("drama_title", drama_title)
+        .limit(1)
+        .execute()
+    )
+
+    data = {
+        "drama_title": drama_title,
+        "cover_file_id": cover_file_id,
+        "cover_channel_msg_id": channel_msg_id,
+    }
+
+    if result.data:
+        old_msg_id = result.data[0].get("cover_channel_msg_id")
+        if old_msg_id and int(old_msg_id) != int(channel_msg_id):
+            safe_delete_message(CHANNEL_ID_VALUE, int(old_msg_id))
+        (
+            supabase.table("drama_covers")
+            .update(data)
+            .eq("drama_title", drama_title)
+            .execute()
+        )
+    else:
+        supabase.table("drama_covers").insert(data).execute()
+
+    ensure_drama_code(drama_title)
+    ensure_drama_upload_date(drama_title)
+
+    try:
+        supabase.table("episodes").update({"cover_url": None}).eq("drama_title", drama_title).execute()
+    except Exception:
+        pass
+
+
+def update_drama_title_in_db(old_title, new_title):
+    existing_code = ensure_drama_code(old_title)
+    existing_date = ensure_drama_upload_date(old_title)
+
+    ep_res = (
+        supabase.table("episodes")
+        .update({"drama_title": new_title})
+        .eq("drama_title", old_title)
+        .execute()
+    )
+    cov_res = (
+        supabase.table("drama_covers")
+        .update({"drama_title": new_title})
+        .eq("drama_title", old_title)
+        .execute()
+    )
+    try:
+        for prefix in [
+            SYN_STORE_PREFIX,
+            LANG_STORE_PREFIX,
+            CODE_STORE_PREFIX,
+            DATE_STORE_PREFIX,
+            DUR_STORE_PREFIX,
+            TAGS_STORE_PREFIX,
+            GIF_STORE_PREFIX,
+        ]:
+            supabase.table("drama_covers").update(
+                {"drama_title": f"{prefix}{new_title}"}
+            ).eq("drama_title", f"{prefix}{old_title}").execute()
+
+        # ប្ដូរឈ្មោះរូប Album ទាំង ៣
+        for slot in (1, 2, 3):
+            supabase.table("drama_covers").update(
+                {"drama_title": f"{ALBUM_STORE_PREFIX}{new_title}__{slot}"}
+            ).eq("drama_title", f"{ALBUM_STORE_PREFIX}{old_title}__{slot}").execute()
+
+        # ប្ដូរឈ្មោះរូប Cover តាមភាគទាំងអស់
+        ep_cov_rows = (
+            supabase.table("drama_covers")
+            .select("drama_title")
+            .like("drama_title", f"{EP_COV_STORE_PREFIX}{old_title}__%")
+            .execute()
+        )
+        old_ep_prefix = f"{EP_COV_STORE_PREFIX}{old_title}__"
+        for r in (ep_cov_rows.data or []):
+            old_k = r.get("drama_title") or ""
+            if old_k.startswith(old_ep_prefix):
+                ep_suffix = old_k[len(old_ep_prefix):]
+                supabase.table("drama_covers").update(
+                    {"drama_title": f"{EP_COV_STORE_PREFIX}{new_title}__{ep_suffix}"}
+                ).eq("drama_title", old_k).execute()
+
+        # ប្ដូរឈ្មោះក្នុង Top Trending បើមាន
+        trending = get_top_trending_from_db()
+        if old_title in trending:
+            new_trending = [new_title if t == old_title else t for t in trending]
+            save_top_trending_to_db(new_trending)
+
+        supabase.table("user_history").update({"drama_title": new_title}).eq("drama_title", old_title).execute()
+        supabase.table("user_history").update({"drama_title": f"{FAV_STORE_PREFIX}{new_title}"}).eq("drama_title", f"{FAV_STORE_PREFIX}{old_title}").execute()
+        supabase.table("user_history").update({"drama_title": f"__RATE__{new_title}"}).eq("drama_title", f"__RATE__{old_title}").execute()
+    except Exception:
+        pass
+
+    if existing_code:
+        save_drama_code_in_db(new_title, existing_code)
+    if existing_date:
+        ensure_drama_upload_date(new_title, existing_date)
+
+    return bool(ep_res.data or cov_res.data)
+
+
+def update_episode_number_in_db(drama_title, old_ep, new_ep):
+    existing_old = find_episode(drama_title, old_ep)
+    if not existing_old:
+        return False, f"❌ រកមិនឃើញភាគទី {old_ep} ក្នុងរឿង «{drama_title}» ទេ។"
+
+    existing_new = find_episode(drama_title, new_ep)
+    if existing_new and old_ep != new_ep:
+        return False, f"❌ ភាគទី {new_ep} មានរួចហើយក្នុងរឿង «{drama_title}»។"
+
+    (
+        supabase.table("episodes")
+        .update({"ep_number": new_ep})
+        .eq("drama_title", drama_title)
+        .eq("ep_number", old_ep)
+        .execute()
+    )
+
+    try:
+        supabase.table("drama_covers").update(
+            {"drama_title": f"{EP_COV_STORE_PREFIX}{drama_title}__{new_ep}"}
+        ).eq("drama_title", f"{EP_COV_STORE_PREFIX}{drama_title}__{old_ep}").execute()
+    except Exception:
+        pass
+
+    ch_msg_id = existing_old.get("channel_msg_id")
+    if ch_msg_id:
+        update_channel_caption(ch_msg_id, f"🎬 រឿង៖ {drama_title} | 📺 ភាគទី {new_ep}")
+
+    return True, f"✅ បានប្ដូរពីភាគទី {old_ep} ទៅភាគទី {new_ep} សម្រាប់រឿង «{drama_title}» បានជោគជ័យ!"
+
+
+def update_drama_category_in_db(drama_title, new_category):
+    save_standalone_category_in_db(new_category)
+    res = (
+        supabase.table("episodes")
+        .update({"category": new_category})
+        .eq("drama_title", drama_title)
+        .execute()
+    )
+    return bool(res.data)
+
+
+def rename_category_globally_in_db(old_cat, new_cat):
+    variants = get_category_variants(old_cat)
+    res = (
+        supabase.table("episodes")
+        .update({"category": new_cat})
+        .in_("category", variants)
+        .execute()
+    )
+    try:
+        old_keys = [f"{CAT_STORE_PREFIX}{v}" for v in variants]
+        supabase.table("drama_covers").delete().in_("drama_title", old_keys).execute()
+        save_standalone_category_in_db(new_cat)
+    except Exception:
+        pass
+    return len(res.data or [])
+
+
+def delete_category_globally_in_db(cat_name):
+    variants = get_category_variants(cat_name)
+    res = (
+        supabase.table("episodes")
+        .update({"category": None})
+        .in_("category", variants)
+        .execute()
+    )
+    try:
+        old_keys = [f"{CAT_STORE_PREFIX}{v}" for v in variants]
+        supabase.table("drama_covers").delete().in_("drama_title", old_keys).execute()
+    except Exception:
+        pass
+    return len(res.data or [])
+
+
+def delete_entire_drama_in_db(drama_title):
+    eps = (
+        supabase.table("episodes")
+        .select("channel_msg_id")
+        .eq("drama_title", drama_title)
+        .execute()
+    )
+    cov_keys = [
+        drama_title,
+        f"{GIF_STORE_PREFIX}{drama_title}",
+        f"{ALBUM_STORE_PREFIX}{drama_title}__1",
+        f"{ALBUM_STORE_PREFIX}{drama_title}__2",
+        f"{ALBUM_STORE_PREFIX}{drama_title}__3",
+    ]
+    cov = (
+        supabase.table("drama_covers")
+        .select("cover_channel_msg_id")
+        .in_("drama_title", cov_keys)
+        .execute()
+    )
+    ep_covs = (
+        supabase.table("drama_covers")
+        .select("drama_title, cover_channel_msg_id")
+        .like("drama_title", f"{EP_COV_STORE_PREFIX}{drama_title}__%")
+        .execute()
+    )
+
+    if not eps.data and not cov.data:
+        return False, f"❌ រកមិនឃើញរឿងឈ្មោះ «{drama_title}» នៅក្នុងប្រព័ន្ធទេ។"
+
+    for row in (eps.data or []):
+        msg_id = row.get("channel_msg_id")
+        if msg_id:
+            safe_delete_message(CHANNEL_ID_VALUE, int(msg_id))
+
+    for row in (cov.data or []):
+        c_id = row.get("cover_channel_msg_id")
+        if c_id:
+            safe_delete_message(CHANNEL_ID_VALUE, int(c_id))
+
+    for row in (ep_covs.data or []):
+        ec_id = row.get("cover_channel_msg_id")
+        if ec_id:
+            safe_delete_message(CHANNEL_ID_VALUE, int(ec_id))
+
+    supabase.table("episodes").delete().eq("drama_title", drama_title).execute()
+    supabase.table("drama_covers").delete().in_("drama_title", cov_keys).execute()
+    try:
+        supabase.table("drama_covers").delete().like("drama_title", f"{EP_COV_STORE_PREFIX}{drama_title}__%").execute()
+        for prefix in [
+            SYN_STORE_PREFIX,
+            LANG_STORE_PREFIX,
+            CODE_STORE_PREFIX,
+            DATE_STORE_PREFIX,
+            DUR_STORE_PREFIX,
+            TAGS_STORE_PREFIX,
+            GIF_STORE_PREFIX,
+        ]:
+            supabase.table("drama_covers").delete().eq("drama_title", f"{prefix}{drama_title}").execute()
+
+        trending = get_top_trending_from_db()
+        if drama_title in trending:
+            save_top_trending_to_db([t for t in trending if t != drama_title])
+
+        supabase.table("user_history").delete().eq("drama_title", drama_title).execute()
+        supabase.table("user_history").delete().eq("drama_title", f"{FAV_STORE_PREFIX}{drama_title}").execute()
+        supabase.table("user_history").delete().eq("drama_title", f"__RATE__{drama_title}").execute()
+    except Exception:
+        pass
+
+    return True, f"🗑️ បានលុបរឿង «{drama_title}» ទាំងមូលចេញពីប្រព័ន្ធ និង Channel បានជោគជ័យ!"
+
+
+def delete_single_episode_in_db(drama_title, ep_number):
+    existing = find_episode(drama_title, ep_number)
+    if not existing:
+        return False, f"❌ រកមិនឃើញភាគទី {ep_number} ក្នុងរឿង «{drama_title}» ទេ។"
+
+    msg_id = existing.get("channel_msg_id")
+    if msg_id:
+        safe_delete_message(CHANNEL_ID_VALUE, int(msg_id))
+
+    try:
+        ep_cov_key = f"{EP_COV_STORE_PREFIX}{drama_title}__{int(ep_number)}"
+        ec = (
+            supabase.table("drama_covers")
+            .select("cover_channel_msg_id")
+            .eq("drama_title", ep_cov_key)
+            .limit(1)
+            .execute()
+        )
+        if ec.data:
+            ec_mid = ec.data[0].get("cover_channel_msg_id")
+            if ec_mid:
+                safe_delete_message(CHANNEL_ID_VALUE, int(ec_mid))
+            supabase.table("drama_covers").delete().eq("drama_title", ep_cov_key).execute()
+    except Exception:
+        pass
+
+    (
+        supabase.table("episodes")
+        .delete()
+        .eq("drama_title", drama_title)
+        .eq("ep_number", ep_number)
+        .execute()
+    )
+    return True, f"🗑️ បានលុប ភាគទី {ep_number} នៃរឿង «{drama_title}» បានជោគជ័យ!"
+
+
+def copy_to_channel(message, custom_caption=None):
+    if custom_caption is not None:
+        return bot.copy_message(
+            chat_id=CHANNEL_ID_VALUE,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id,
+            caption=custom_caption,
+        )
+    return bot.copy_message(
+        chat_id=CHANNEL_ID_VALUE,
+        from_chat_id=message.chat.id,
+        message_id=message.message_id,
+    )
+
+
+def format_video_duration(seconds):
+    seconds = max(0, int(seconds or 0))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+def create_duration_cover_from_bytes(photo_bytes: bytes, duration_seconds: int, drama_title: str):
+    with Image.open(io.BytesIO(photo_bytes)) as source:
+        image = source.convert("RGB")
+
+    if int(duration_seconds or 0) > 0:
+        overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        duration_text = format_video_duration(duration_seconds)
+        font_size = max(18, int(image.width * 0.045))
+
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except OSError:
+            font = ImageFont.load_default()
+
+        bbox = draw.textbbox((0, 0), duration_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        pad_x = max(10, int(image.width * 0.018))
+        pad_y = max(6, int(image.width * 0.012))
+        margin = max(12, int(image.width * 0.025))
+
+        x2 = image.width - margin
+        y2 = image.height - margin
+        x1 = x2 - text_width - pad_x * 2
+        y1 = y2 - text_height - pad_y * 2
+
+        draw.rounded_rectangle(
+            (x1, y1, x2, y2),
+            radius=max(7, int(font_size * 0.22)),
+            fill=(0, 0, 0, 220),
+        )
+        draw.text(
+            (x1 + pad_x, y1 + pad_y - bbox[1]),
+            duration_text,
+            font=font,
+            fill=(255, 255, 255, 255),
+        )
+        image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+
+    output = io.BytesIO()
+    output.name = "duration_cover.jpg"
+    image.save(output, format="JPEG", quality=92, optimize=True)
+    output.seek(0)
+
+    drama_code = ensure_drama_code(drama_title)
+    return bot.send_photo(
+        chat_id=CHANNEL_ID_VALUE,
+        photo=output,
+        caption=f"🖼️ Cover រឿង៖ {drama_title} [{drama_code}]",
+    )
+
+
+def update_channel_caption(channel_msg_id, caption_text):
+    try:
+        bot.edit_message_caption(
+            caption=caption_text,
+            chat_id=CHANNEL_ID_VALUE,
+            message_id=channel_msg_id,
+        )
+    except Exception:
+        log.warning("Could not edit caption for channel message %s", channel_msg_id)
+
+
+def send_drama_episode_list(message, drama_title, reply_markup=None):
+    result = (
+        supabase.table("episodes")
+        .select("ep_number,channel_msg_id,category")
+        .eq("drama_title", drama_title)
+        .order("ep_number")
+        .execute()
+    )
+
+    if not result.data:
+        send_clean_message(message, f"មិនទាន់មានភាគរឿង៖ {drama_title}", reply_markup=reply_markup)
+        return
+
+    drama_code = ensure_drama_code(drama_title)
+    upload_date = ensure_drama_upload_date(drama_title)
+    cat = result.data[0].get("category") or "មិនទាន់កំណត់"
+    lang_label = get_drama_lang_from_db(drama_title)
+    syn = get_drama_synopsis_from_db(drama_title) or "មិនទាន់មាន"
+    tags = get_drama_tags_from_db(drama_title) or "មិនទាន់មាន"
+    dur = get_drama_duration_from_db(drama_title)
+    dur_label = format_video_duration(dur) if dur > 0 else "មិនមាន"
+    has_gif = "✅ មាន (Auto Loop)" if get_drama_gif_exists_in_db(drama_title) else "❌ មិនទាន់មាន"
+    album_count = get_drama_album_count_from_db(drama_title)
+    is_trending = "🔥 ស្ថិតក្នុង Top Trending" if drama_title in get_top_trending_from_db() else "ធម្មតា"
+
+    lines = [
+        f"🎬 រឿង៖ {drama_title}",
+        f"🔖 CODE៖ {drama_code}",
+        f"📅 ថ្ងៃ Upload៖ {upload_date}",
+        f"⏱ រយៈពេល៖ {dur_label}",
+        f"🎞️ GIF Preview៖ {has_gif}",
+        f"📸 រូប Album៖ {album_count}/3 រូប",
+        f"🔥 Trending៖ {is_trending}",
+        f"🗂 ប្រភេទ៖ {cat}",
+        f"🏷 Tags៖ {tags}",
+        f"📖 សង្ខេប៖ {syn}",
+        f"📊 សរុប៖ {len(result.data)} ភាគ",
+        "📺 បញ្ជីភាគ៖",
+    ]
+    for episode in result.data:
+        lines.append(
+            f"• ភាគទី {episode.get('ep_number')} "
+            f"(Message ID: {episode.get('channel_msg_id')})"
+        )
+    send_clean_message(message, "\n".join(lines), reply_markup=reply_markup)
+
+
+# =====================================================
+# /start & /stats
+# =====================================================
+
+@bot.chat_join_request_handler()
+def handle_admin_bot_chat_join_request(join_req):
+    try:
+        uid = int(join_req.from_user.id)
+        bot.approve_chat_join_request(join_req.chat.id, uid)
+    except Exception:
+        pass
+
+
+@bot.message_handler(commands=["start", "stats"])
+def start_command(message):
+    if not is_admin(message.from_user.id):
+        send_clean_message(message, "⛔ អ្នកមិនមានសិទ្ធិប្រើ Admin Bot នេះទេ។")
+        return
+
+    admin_states.pop(message.from_user.id, None)
+
+    send_clean_message(
+        message,
+        "👋 សូមស្វាគមន៍មកកាន់ផ្ទាំងការងារ XFANSTER Admin Bot!\n\n"
+        "សូមជ្រើសរើសមុខងារខាងក្រោម៖\n"
+        "• ➕ បញ្ចូលរឿងថ្មី (Auto Cover, រូប Album ៣រូប, GIF Preview, Duration & CODE)\n"
+        "• 📹 បន្ថែមភាគ (Auto លេខភាគបន្ទាប់ + Auto Cover ភាគ)\n"
+        "• ✏️ កែរឿង / ប្រភេទ (កែចំណងជើង, Cover រឿង, Cover តាមភាគ, រូប Album ៣រូប, GIF)\n"
+        "• 🔥 គ្រប់គ្រង Top Trending (ជ្រើសរើសរឿងបង្ហាញក្នុងប្លុក Top Trending)\n"
+        "• 🔔 ផ្ញើ Notification រឿងថ្មី (ផ្ញើរូប Cover + ចំណងជើង + CODE ទៅកាន់ User Bot Chat)\n"
+        "• 📢 កំណត់ Channel/Group តម្រូវឱ្យចូល (ប្ដូរ ID និង Link តាមឆាតផ្ទាល់)\n"
+        "• 📊 ស្ថិតិអ្នកប្រើប្រាស់ និង 🗑️ លុបរឿង / ភាគ",
+        reply_markup=main_menu_keyboard(),
+        delete_user_msg=True,
+    )
+
+
+# =====================================================
+# INTERACTIVE WORKFLOW HANDLER
+# =====================================================
+
+@bot.message_handler(content_types=["text", "video", "document", "photo", "animation"])
+def handle_interactive_flow(message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        send_clean_message(message, "⛔ អ្នកមិនមានសិទ្ធិប្រើ Admin Bot នេះទេ។")
+        return
+
+    text = message.text.strip() if message.content_type == "text" and message.text else ""
+
+    if text == BTN_CANCEL:
+        admin_states.pop(user_id, None)
+        send_clean_message(
+            message,
+            "✨ ផ្ទាំងការងារត្រូវបានសម្អាតរួចរាល់!\nសូមជ្រើសរើសមុខងារខាងក្រោម៖",
+            reply_markup=main_menu_keyboard(),
+        )
+        return
+
+    # -------------------------------------------------
+    # USER ANALYTICS (ADMIN ONLY)
+    # -------------------------------------------------
+    if text == BTN_USER_ANALYTICS:
+        admin_states.pop(user_id, None)
+        stats = compute_admin_user_analytics()
+        ns = stats["notif_stats"]
+        report = (
+            "📊 ស្ថិតិអ្នកប្រើប្រាស់ និងប្រព័ន្ធ (Admin Analytics)\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"👥 អ្នកប្រើប្រាស់សរុប (ធ្លាប់ចុច /start)៖ {stats['total_users']} នាក់\n"
+            f"🆕 អ្នកប្រើថ្មីថ្ងៃនេះ៖ {stats['new_users_today']} នាក់\n"
+            f"📅 អ្នកប្រើថ្មី (៧ ថ្ងៃចុងក្រោយ)៖ {stats['new_users_7d']} នាក់\n"
+            f"🔥 អ្នកប្រើសកម្មថ្ងៃនេះ៖ {stats['active_users_today']} នាក់\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🎬 ចំនួនរឿងសរុប៖ {stats['total_dramas']} រឿង\n"
+            f"📺 ចំនួនភាគសរុប៖ {stats['total_episodes']} ភាគ\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "🔔 ស្ថិតិការផ្ញើ Notification (User Bot Chat)៖\n"
+            f"• ចំនួនដងផ្ញើសរុប៖ {ns.get('total_broadcasts', 0)} ដង\n"
+            f"• សារផ្ញើជោគជ័យសរុប៖ {ns.get('total_delivered', 0)} សារ\n"
+            f"• រឿងផ្ញើចុងក្រោយ៖ {ns.get('last_drama', 'មិនទាន់មាន')}\n"
+            f"• លទ្ធផលចុងក្រោយ៖ ជោគជ័យ {ns.get('last_sent_ok', 0)} / បរាជ័យ {ns.get('last_failed', 0)}\n"
+            f"• ពេលវេលាចុងក្រោយ៖ {ns.get('last_time', 'មិនទាន់មាន')}"
+        )
+        send_clean_message(message, report, reply_markup=main_menu_keyboard())
+        return
+
+    # -------------------------------------------------
+    # TOP TRENDING MANAGEMENT MENU (REQ 6)
+    # -------------------------------------------------
+    if text == BTN_TOP_TRENDING:
+        trending_list = get_top_trending_from_db()
+        admin_states[user_id] = {"step": "TRENDING_MENU"}
+        preview_lines = "\n".join(f"{i+1}. 🔥 {t} ({ensure_drama_code(t)})" for i, t in enumerate(trending_list)) or "មិនទាន់មានរឿងក្នុង Top Trending នៅឡើយទេ។"
+        send_clean_message(
+            message,
+            f"🔥 គ្រប់គ្រងប្លុក Top Trending (សរុប {len(trending_list)} រឿង)\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"{preview_lines}\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            "សូមជ្រើសរើសមុខងារខាងក្រោម៖",
+            reply_markup=top_trending_menu_keyboard(),
+        )
+        return
+
+    # -------------------------------------------------
+    # NEW DRAMA NOTIFICATION MENU (REQ 7)
+    # -------------------------------------------------
+    if text == BTN_NOTIFY_DRAMA:
+        dramas = get_all_drama_titles()
+        if not dramas:
+            send_clean_message(message, "❌ មិនទាន់មានរឿងនៅក្នុងប្រព័ន្ធនៅឡើយទេ។", reply_markup=main_menu_keyboard())
+            return
+        admin_states[user_id] = {
+            "step": "NOTIFY_SELECT_DRAMA",
+            "dramas_list": dramas,
+            "page": 0,
+        }
+        kb, cur_page, total_pages = drama_pagination_keyboard(dramas, 0, 10)
+        total_users = len(get_all_started_user_ids())
+        send_clean_message(
+            message,
+            f"🔔 ផ្ញើ Notification រឿងថ្មី (ចូលទៅកាន់ User Bot Chat)\n"
+            f"👥 អ្នកធ្លាប់ចុច /start សរុប៖ {total_users} នាក់\n"
+            f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n\n"
+            "👇 សូមចុចជ្រើសរើស **ឈ្មោះរឿង** (ឬវាយ CODE) ដែលចង់ផ្ញើ Notification៖",
+            reply_markup=kb,
+        )
+        return
+
+    if text == BTN_NEW_DRAMA:
+        admin_states[user_id] = {"step": "NEW_WAIT_VIDEO", "video_duration": 0}
+        send_clean_message(
+            message,
+            "🎬 បញ្ចូលរឿងថ្មី (Auto Cover + រូប Album ៣រូប + GIF Preview)\n\n"
+            "សូម Upload វីដេអូ ជាមួយចំណងជើងរឿង (ដាក់ចំណងជើងក្នុង Caption នៃវីដេអូ)៖",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    if text == BTN_ADD_EP:
+        admin_states[user_id] = {"step": "ADD_WAIT_TITLE"}
+        send_clean_message(
+            message,
+            "📹 បន្ថែមភាគរឿង (Auto លេខភាគ + Auto Cover ភាគ)\n\n"
+            "សូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **Drama CODE (ឧ. XF-000001)** ដែលអ្នកចង់បន្ថែមភាគ៖",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    if text == BTN_EDIT_DRAMA:
+        admin_states[user_id] = {"step": "EDIT_CHOOSE_TYPE"}
+        send_clean_message(
+            message,
+            "✏️ កែរឿង, Cover តាមភាគ, រូប Album (៣រូប) និង Category\n\nសូមជ្រើសរើសផ្នែកដែលអ្នកចង់កែប្រែ៖",
+            reply_markup=edit_menu_keyboard(),
+        )
+        return
+
+    if text == BTN_DELETE_DRAMA:
+        admin_states[user_id] = {"step": "DELETE_CHOOSE_TYPE"}
+        send_clean_message(
+            message,
+            "🗑️ លុបរឿង ឬ លុបភាគរឿង\n\nសូមជ្រើសរើសប្រភេទនៃការលុបខាងក្រោម៖",
+            reply_markup=delete_menu_keyboard(),
+        )
+        return
+
+    if text == BTN_CHECK_DRAMA:
+        admin_states[user_id] = {"step": "CHECK_WAIT_TITLE"}
+        send_clean_message(
+            message,
+            "📋 ពិនិត្យភាគរឿង\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **Drama CODE (ឧ. XF-000001)** ដែលចង់ពិនិត្យ៖",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    if text == BTN_CHANNEL_SETTINGS or text.startswith("/setchannel"):
+        cid, clink = get_required_channel_config_from_db()
+        admin_states[user_id] = {"step": "CHANNEL_SETTINGS_MENU"}
+        send_clean_message(
+            message,
+            f"📢 គ្រប់គ្រង Channel/Group តម្រូវឱ្យចូលមុនមើលរឿង ({CHANNEL_DISPLAY_NAME})\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 Channel/Group ID បច្ចុប្បន្ន៖ `{cid}`\n"
+            f"🔗 Invite Link / URL បច្ចុប្បន្ន៖ {clink}\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            "សូមជ្រើសរើសមុខងារខាងក្រោម ដើម្បីផ្លាស់ប្ដូរបានគ្រប់ពេលដោយមិនបាច់កែកូដ៖",
+            reply_markup=channel_settings_menu_keyboard(),
+        )
+        return
+
+    if text == BTN_MANAGE_ADMINS:
+        admin_states[user_id] = {"step": "MANAGE_ADMINS_MENU"}
+        send_clean_message(
+            message,
+            "👥 គ្រប់គ្រងសិទ្ធិ Admin\n\nសូមជ្រើសរើសមុខងារខាងក្រោម៖",
+            reply_markup=manage_admins_keyboard(),
+        )
+        return
+
+    state = admin_states.get(user_id)
+    if not state:
+        send_clean_message(
+            message,
+            "សូមជ្រើសរើសមុខងារតាមរយៈប៊ូតុងខាងក្រោម៖",
+            reply_markup=main_menu_keyboard(),
+        )
+        return
+
+    step = state.get("step")
+
+    try:
+        # =================================================
+        # FLOW: TOP TRENDING MANAGEMENT (REQ 6)
+        # =================================================
+        if step == "TRENDING_MENU":
+            if text == BTN_LIST_TRENDING:
+                trending_list = get_top_trending_from_db()
+                lines = [f"🔥 បញ្ជីរឿង Top Trending (សរុប {len(trending_list)} រឿង)៖"]
+                if not trending_list:
+                    lines.append("• មិនទាន់មានរឿងនៅឡើយទេ។")
+                else:
+                    for i, t in enumerate(trending_list, start=1):
+                        lines.append(f"{i}. {t} ({ensure_drama_code(t)})")
+                admin_states.pop(user_id, None)
+                send_clean_message(message, "\n".join(lines), reply_markup=main_menu_keyboard())
+                return
+
+            if text == BTN_CLEAR_TRENDING:
+                save_top_trending_to_db([])
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    "🗑️ បានសម្អាតបញ្ជីរឿង Top Trending ទាំងអស់រួចរាល់!",
+                    reply_markup=main_menu_keyboard(),
+                )
+                return
+
+            if text == BTN_ADD_TRENDING:
+                dramas = get_all_drama_titles()
+                if not dramas:
+                    admin_states.pop(user_id, None)
+                    send_clean_message(message, "❌ មិនទាន់មានរឿងនៅក្នុងប្រព័ន្ធទេ។", reply_markup=main_menu_keyboard())
+                    return
+                trending_set = set(get_top_trending_from_db())
+                state["step"] = "TRENDING_ADD_SELECT"
+                state["dramas_list"] = dramas
+                state["page"] = 0
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, 0, 10, highlight_set=trending_set)
+                send_clean_message(
+                    message,
+                    f"➕ ជ្រើសរើសរឿងដាក់ចូល Top Trending\n"
+                    f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n\n"
+                    "👇 សូមចុចលើឈ្មោះរឿង (ឬវាយ CODE) ដើម្បីដាក់ចូល Top Trending៖",
+                    reply_markup=kb,
+                )
+                return
+
+            if text == BTN_REMOVE_TRENDING:
+                trending_list = get_top_trending_from_db()
+                if not trending_list:
+                    admin_states.pop(user_id, None)
+                    send_clean_message(message, "❌ មិនទាន់មានរឿងក្នុងបញ្ជី Top Trending ទេ។", reply_markup=main_menu_keyboard())
+                    return
+                state["step"] = "TRENDING_REMOVE_SELECT"
+                state["dramas_list"] = trending_list
+                state["page"] = 0
+                kb, cur_page, total_pages = drama_pagination_keyboard(trending_list, 0, 10)
+                send_clean_message(
+                    message,
+                    f"➖ ដករឿងចេញពី Top Trending\n"
+                    f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n\n"
+                    "👇 សូមចុចលើឈ្មោះរឿង (ឬវាយ CODE) ដែលចង់ដកចេញ៖",
+                    reply_markup=kb,
+                )
+                return
+
+            send_clean_message(message, "សូមជ្រើសរើសតាមប៊ូតុងខាងក្រោម៖", reply_markup=top_trending_menu_keyboard())
+            return
+
+        if step == "TRENDING_ADD_SELECT":
+            dramas = state.get("dramas_list") or []
+            page = state.get("page", 0)
+            trending_list = get_top_trending_from_db()
+            trending_set = set(trending_list)
+
+            if text == BTN_NEXT_PAGE:
+                page += 1
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10, highlight_set=trending_set)
+                state["page"] = cur_page
+                send_clean_message(message, f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n👇 ជ្រើសរើសរឿងដាក់ Top Trending៖", reply_markup=kb)
+                return
+
+            if text == BTN_PREV_PAGE:
+                page = max(0, page - 1)
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10, highlight_set=trending_set)
+                state["page"] = cur_page
+                send_clean_message(message, f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n👇 ជ្រើសរើសរឿងដាក់ Top Trending៖", reply_markup=kb)
+                return
+
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title or drama_title not in dramas:
+                kb, cur_page, _ = drama_pagination_keyboard(dramas, page, 10, highlight_set=trending_set)
+                send_clean_message(message, "❌ រកមិនឃើញរឿងនេះទេ សូមជ្រើសរើសពីបញ្ជី៖", reply_markup=kb)
+                return
+
+            if drama_title not in trending_list:
+                trending_list.insert(0, drama_title)
+                save_top_trending_to_db(trending_list)
+
+            trending_set = set(trending_list)
+            kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10, highlight_set=trending_set)
+            send_clean_message(
+                message,
+                f"✅ បានដាក់រឿង «{drama_title}» ចូលក្នុង **Top Trending** រួចរាល់! (សរុប {len(trending_list)} រឿង)\n\n"
+                "👇 អ្នកអាចចុចជ្រើសរើសរឿងបន្ថែមទៀត ឬចុច «❌ បោះបង់» ដើម្បីត្រឡប់ទៅម៉ឺនុយដើម៖",
+                reply_markup=kb,
+            )
+            return
+
+        if step == "TRENDING_REMOVE_SELECT":
+            dramas = state.get("dramas_list") or []
+            page = state.get("page", 0)
+
+            if text == BTN_NEXT_PAGE:
+                page += 1
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10)
+                state["page"] = cur_page
+                send_clean_message(message, f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n👇 ជ្រើសរើសរឿងដើម្បីដកចេញ៖", reply_markup=kb)
+                return
+
+            if text == BTN_PREV_PAGE:
+                page = max(0, page - 1)
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10)
+                state["page"] = cur_page
+                send_clean_message(message, f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n👇 ជ្រើសរើសរឿងដើម្បីដកចេញ៖", reply_markup=kb)
+                return
+
+            drama_title = resolve_drama_title_or_code(text)
+            trending_list = get_top_trending_from_db()
+            if not drama_title or drama_title not in trending_list:
+                kb, cur_page, _ = drama_pagination_keyboard(trending_list, page, 10)
+                send_clean_message(message, "❌ រឿងនេះមិនស្ថិតក្នុងបញ្ជី Top Trending ទេ៖", reply_markup=kb)
+                return
+
+            new_trending = [t for t in trending_list if t != drama_title]
+            save_top_trending_to_db(new_trending)
+
+            if not new_trending:
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"✅ បានដករឿង «{drama_title}» ចេញពី Top Trending រួចរាល់! (បញ្ជីឥឡូវទទេ)",
+                    reply_markup=main_menu_keyboard(),
+                )
+                return
+
+            state["dramas_list"] = new_trending
+            kb, cur_page, total_pages = drama_pagination_keyboard(new_trending, 0, 10)
+            state["page"] = cur_page
+            send_clean_message(
+                message,
+                f"✅ បានដករឿង «{drama_title}» ចេញពី Top Trending រួចរាល់! (នៅសល់ {len(new_trending)} រឿង)\n"
+                "👇 អាចចុចដករឿងផ្សេងទៀត ឬចុច «❌ បោះបង់» ដើម្បីត្រឡប់៖",
+                reply_markup=kb,
+            )
+            return
+
+        # =================================================
+        # FLOW: NEW DRAMA NOTIFICATION SELECTION (REQ 7)
+        # =================================================
+        # =================================================
+        # FLOW: DYNAMIC CHANNEL/GROUP SETTINGS (POINT 4)
+        # =================================================
+        if step == "CHANNEL_SETTINGS_MENU":
+            cid, clink = get_required_channel_config_from_db()
+            if text == BTN_VIEW_REQ_CHANNEL:
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"📋 ការកំណត់ Channel/Group បច្ចុប្បន្ន ({CHANNEL_DISPLAY_NAME})៖\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"🆔 Channel/Group ID៖ `{cid}`\n"
+                    f"🔗 Invite Link / URL៖ {clink}",
+                    reply_markup=main_menu_keyboard(),
+                )
+                return
+
+            if text == BTN_SET_REQ_CHANNEL_ID:
+                state["step"] = "SET_REQ_CHANNEL_WAIT_ID"
+                send_clean_message(
+                    message,
+                    f"🆔 ប្ដូរ Channel/Group ID (បច្ចុប្បន្ន៖ `{cid}`)\n\n"
+                    "សូមវាយបញ្ចូល **Channel/Group ID ថ្មី** (ឧ. `-1001234567890`) ឬ **Forward សារពីក្នុង Channel** មកកាន់ទីនេះផ្ទាល់៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_SET_REQ_CHANNEL_LINK:
+                state["step"] = "SET_REQ_CHANNEL_WAIT_LINK"
+                send_clean_message(
+                    message,
+                    f"🔗 ប្ដូរ Invite Link / URL Channel/Group (បច្ចុប្បន្ន៖ {clink})\n\n"
+                    "សូមវាយបញ្ចូល **Link / URL ថ្មី** (ឧ. `https://t.me/+xxxx` ឬ `https://t.me/xfanster` ឬ `@username`)៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_SET_REQ_CHANNEL_BOTH:
+                state["step"] = "SET_REQ_CHANNEL_WAIT_BOTH"
+                send_clean_message(
+                    message,
+                    "⚡ ប្ដូរទាំង Channel/Group ID និង Invite Link ព្រមគ្នា\n\n"
+                    "សូមវាយបញ្ចូលតាមទម្រង់៖\n"
+                    "`-1001234567890 https://t.me/+xxxx`\n"
+                    "(ដកឃ្លា ឬចុះបន្ទាត់រវាង ID និង Link)៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            send_clean_message(message, "សូមជ្រើសរើសតាមប៊ូតុងខាងក្រោម៖", reply_markup=channel_settings_menu_keyboard())
+            return
+
+        if step == "SET_REQ_CHANNEL_WAIT_ID":
+            new_cid = None
+            if getattr(message, "forward_from_chat", None) and getattr(message.forward_from_chat, "id", None):
+                new_cid = int(message.forward_from_chat.id)
+            elif text:
+                cleaned_id = text.strip()
+                if cleaned_id.lstrip("-").isdigit():
+                    new_cid = int(cleaned_id)
+
+            if new_cid is None:
+                send_clean_message(
+                    message,
+                    "❌ ទម្រង់ ID មិនត្រឹមត្រូវ។ សូមវាយបញ្ចូលជាលេខ (ឧ. `-1001234567890`) ឬ Forward សារពីក្នុង Channel៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            saved_id, saved_link = save_required_channel_config_to_db(channel_id=new_cid)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានផ្លាស់ប្ដូរ Channel/Group ID ដោយជោគជ័យ!\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🆔 Channel/Group ID ថ្មី៖ `{saved_id}`\n"
+                f"🔗 Invite Link៖ {saved_link}\n\n"
+                "⚠️ សូមប្រាកដថា User Bot និង Admin Bot ជា Admin នៅក្នុង Channel/Group ថ្មីនេះ។",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "SET_REQ_CHANNEL_WAIT_LINK":
+            new_link = normalize_channel_link_input(text)
+            if not new_link:
+                send_clean_message(
+                    message,
+                    "❌ ទម្រង់ Link មិនត្រឹមត្រូវ។ សូមបញ្ចូលជា `https://t.me/...` ឬ `@username`៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            saved_id, saved_link = save_required_channel_config_to_db(channel_link=new_link)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានផ្លាស់ប្ដូរ Invite Link / URL ដោយជោគជ័យ!\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🆔 Channel/Group ID៖ `{saved_id}`\n"
+                f"🔗 Invite Link ថ្មី៖ {saved_link}",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "SET_REQ_CHANNEL_WAIT_BOTH":
+            parts = (text or "").strip().split()
+            if len(parts) < 2 or not parts[0].lstrip("-").isdigit():
+                send_clean_message(
+                    message,
+                    "❌ សូមវាយបញ្ចូល ID មុន រួចដកឃ្លា តាមด้วย Link (ឧ. `-1001234567890 https://t.me/+xxxx`)៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+            new_cid = int(parts[0])
+            new_link = normalize_channel_link_input(parts[1])
+            if not new_link:
+                send_clean_message(
+                    message,
+                    "❌ ទម្រង់ Link មិនត្រឹមត្រូវ។ សូមបញ្ចូលជា `https://t.me/...` ឬ `@username`៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            saved_id, saved_link = save_required_channel_config_to_db(channel_id=new_cid, channel_link=new_link)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានផ្លាស់ប្ដូរទាំង Channel/Group ID និង Invite Link ដោយជោគជ័យ!\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🆔 Channel/Group ID ថ្មី៖ `{saved_id}`\n"
+                f"🔗 Invite Link ថ្មី៖ {saved_link}",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        # =================================================
+        # FLOW: NEW DRAMA NOTIFICATION SELECTION (POINT 3.2)
+        # =================================================
+        if step == "NOTIFY_SELECT_DRAMA":
+            dramas = state.get("dramas_list") or []
+            page = state.get("page", 0)
+
+            if text == BTN_NEXT_PAGE:
+                page += 1
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10)
+                state["page"] = cur_page
+                send_clean_message(
+                    message,
+                    f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n👇 សូមជ្រើសរើសរឿងដែលត្រូវផ្ញើ Notification៖",
+                    reply_markup=kb,
+                )
+                return
+
+            if text == BTN_PREV_PAGE:
+                page = max(0, page - 1)
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10)
+                state["page"] = cur_page
+                send_clean_message(
+                    message,
+                    f"📄 ទំព័រទី {cur_page + 1} / {total_pages}\n👇 សូមជ្រើសរើសរឿងដែលត្រូវផ្ញើ Notification៖",
+                    reply_markup=kb,
+                )
+                return
+
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title or drama_title not in dramas:
+                kb, cur_page, _ = drama_pagination_keyboard(dramas, page, 10)
+                send_clean_message(message, "❌ រកមិនឃើញរឿងនេះទេ សូមជ្រើសរើសពីបញ្ជី ឬវាយ CODE ឱ្យត្រឹមត្រូវ៖", reply_markup=kb)
+                return
+
+            state["drama_title"] = drama_title
+            state["step"] = "NOTIFY_CONFIRM_SEND"
+            total_users = len(get_all_started_user_ids())
+            confirm_kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+            confirm_kb.add(
+                KeyboardButton(BTN_SEND_NOTIF_NOW),
+                KeyboardButton(BTN_NOTIF_UPLOAD_COVER),
+                KeyboardButton(BTN_CANCEL),
+            )
+            send_clean_message(
+                message,
+                f"🔔 បញ្ជាក់ការផ្ញើ Notification (ទៅកាន់ User Bot Chat)\n\n"
+                f"🎬 ចំណងជើង៖ {drama_title}\n"
+                f"🆔 លេខកូដ៖ {ensure_drama_code(drama_title)}\n"
+                f"👥 ផ្ញើទៅកាន់អ្នកធ្លាប់ចុច /start ចំនួន៖ {total_users} នាក់\n\n"
+                "• ចុច **«🔔 ផ្ញើ Notification ឥឡូវនេះ»** ដើម្បីផ្ញើជាមួយរូប Cover រឿងដែលមានស្រាប់\n"
+                "• ឬចុច **«📤 Upload រូប Cover ថ្មីសម្រាប់ Notification»** (ឬផ្ញើរូប Photo ចូលផ្ទាល់) ដើម្បីប្រើរូប Cover ថ្មី៖",
+                reply_markup=confirm_kb,
+            )
+            return
+
+        if step == "NOTIFY_CONFIRM_SEND":
+            drama_title = state.get("drama_title")
+            if not drama_title:
+                admin_states.pop(user_id, None)
+                send_clean_message(message, "❌ រកមិនឃើញចំណងជើងរឿងទេ។", reply_markup=main_menu_keyboard())
+                return
+
+            if message.content_type == "text" and text == BTN_NOTIF_UPLOAD_COVER:
+                state["step"] = "NOTIFY_WAIT_CUSTOM_COVER"
+                send_clean_message(
+                    message,
+                    f"📤 សូមផ្ញើរូបភាព (Photo) ថ្មីសម្រាប់ធ្វើជា Cover នៃសារ Notification រឿង «{drama_title}» ({ensure_drama_code(drama_title)})៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if message.content_type == "photo":
+                p_file = bot.get_file(message.photo[-1].file_id)
+                custom_cov_bytes = bot.download_file(p_file.file_path)
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"🚀 បានទទួលរូប Cover ថ្មី! កំពុងផ្ញើ Notification រឿង «{drama_title}» ({ensure_drama_code(drama_title)}) ទៅកាន់ **User Bot Chat**...",
+                    reply_markup=main_menu_keyboard(),
+                )
+                broadcast_new_drama_notification_async(
+                    drama_title=drama_title,
+                    admin_chat_id=message.chat.id,
+                    custom_cover_bytes=custom_cov_bytes,
+                )
+                return
+
+            admin_states.pop(user_id, None)
+            if text == BTN_SEND_NOTIF_NOW:
+                send_clean_message(
+                    message,
+                    f"🚀 កំពុងផ្ញើ Notification រឿង «{drama_title}» ({ensure_drama_code(drama_title)}) ទៅកាន់ **User Bot Chat** របស់អ្នកប្រើប្រាស់ទាំងអស់...\n"
+                    "(ប្រព័ន្ធនឹងផ្ញើរបាយការណ៍ជូនអ្នកនៅពេលផ្ញើចប់)",
+                    reply_markup=main_menu_keyboard(),
+                )
+                broadcast_new_drama_notification_async(drama_title, message.chat.id)
+            else:
+                send_clean_message(
+                    message,
+                    "✅ រួចរាល់! មិនបានផ្ញើ Notification ទេ។",
+                    reply_markup=main_menu_keyboard(),
+                )
+            return
+
+        if step == "NOTIFY_WAIT_CUSTOM_COVER":
+            drama_title = state.get("drama_title")
+            if message.content_type != "photo":
+                send_clean_message(
+                    message,
+                    "❌ សូមផ្ញើជារូបភាព (Photo) សម្រាប់ធ្វើជា Cover នៃសារ Notification៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            p_file = bot.get_file(message.photo[-1].file_id)
+            custom_cov_bytes = bot.download_file(p_file.file_path)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"🚀 បានទទួលរូប Cover ថ្មី! កំពុងផ្ញើ Notification រឿង «{drama_title}» ({ensure_drama_code(drama_title)}) ទៅកាន់ **User Bot Chat**...\n"
+                "(ប្រព័ន្ធនឹងផ្ញើរបាយការណ៍ជូនអ្នកនៅពេលផ្ញើចប់)",
+                reply_markup=main_menu_keyboard(),
+            )
+            broadcast_new_drama_notification_async(
+                drama_title=drama_title,
+                admin_chat_id=message.chat.id,
+                custom_cover_bytes=custom_cov_bytes,
+            )
+            return
+
+        # =================================================
+        # FLOW 0: MANAGE MULTIPLE ADMINS
+        # =================================================
+        if step == "MANAGE_ADMINS_MENU":
+            if text == BTN_LIST_ADMINS:
+                admins = sorted(list(load_admins_from_db()))
+                lines = ["📋 បញ្ជី Admin IDs ទាំងអស់៖"]
+                for aid in admins:
+                    tag = " (Main Env Admin)" if aid in ENV_ADMIN_IDS else ""
+                    lines.append(f"• {aid}{tag}")
+                admin_states.pop(user_id, None)
+                send_clean_message(message, "\n".join(lines), reply_markup=main_menu_keyboard())
+                return
+
+            if text == BTN_ADD_ADMIN:
+                state["step"] = "ADD_ADMIN_WAIT_ID"
+                send_clean_message(
+                    message,
+                    "➕ បន្ថែម Admin ថ្មី\n\nសូមវាយបញ្ចូល **Telegram User ID** (ជាលេខ) របស់ Admin ថ្មី៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_REMOVE_ADMIN:
+                state["step"] = "REMOVE_ADMIN_WAIT_ID"
+                send_clean_message(
+                    message,
+                    "➖ ដកសិទ្ធិ Admin\n\nសូមវាយបញ្ចូល **Telegram User ID** ដែលចង់ដកសិទ្ធិ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            send_clean_message(message, "សូមជ្រើសរើសតាមប៊ូតុងខាងក្រោម៖", reply_markup=manage_admins_keyboard())
+            return
+
+        if step == "ADD_ADMIN_WAIT_ID":
+            if not text.isdigit():
+                send_clean_message(message, "❌ សូមវាយបញ្ចូល Telegram User ID ជាលេខគត់៖", reply_markup=cancel_keyboard())
+                return
+            new_aid = int(text)
+            current_set = load_admins_from_db()
+            current_set.add(new_aid)
+            save_admins_to_db(current_set)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានបន្ថែម Admin ID `{new_aid}` ជោគជ័យ!",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "REMOVE_ADMIN_WAIT_ID":
+            if not text.isdigit():
+                send_clean_message(message, "❌ សូមវាយបញ្ចូល Telegram User ID ជាលេខគត់៖", reply_markup=cancel_keyboard())
+                return
+            rem_aid = int(text)
+            if rem_aid in ENV_ADMIN_IDS:
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    "⚠️ មិនអាចលុប Main Admin ដែលកំណត់ក្នុង Environment Variable បានទេ។",
+                    reply_markup=main_menu_keyboard(),
+                )
+                return
+            current_set = load_admins_from_db()
+            current_set.discard(rem_aid)
+            save_admins_to_db(current_set)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"🗑️ បានដកសិទ្ធិ Admin ID `{rem_aid}` រួចរាល់!",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        # =================================================
+        # FLOW 1: បញ្ចូលរឿងថ្មី (AUTO COVER + ALBUM 3 PHOTOS + EP COVER + GIF)
+        # =================================================
+        if step == "NEW_WAIT_VIDEO":
+            if not is_valid_video(message):
+                send_clean_message(
+                    message,
+                    "❌ សូមផ្ញើជាវីដេអូ (Video ឬ Document Video) ជាមួយចំណងជើងរឿងក្នុង Caption៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            caption_title = parse_drama_title(message.caption) if message.caption else ""
+            video_duration = 0
+            if message.content_type == "video" and getattr(message, "video", None):
+                video_duration = int(message.video.duration or 0)
+            state["video_duration"] = video_duration
+
+            frames_list, gif_bytes = extract_video_frames_and_gif(message)
+            state["extracted_frames"] = frames_list
+            state["extracted_gif"] = gif_bytes
+            if frames_list:
+                state["first_ep_frame_bytes"] = frames_list[0]
+            else:
+                state["first_ep_frame_bytes"] = extract_single_frame_from_video_message(message)
+
+            sent = copy_to_channel(
+                message,
+                custom_caption=f"🎬 រឿង៖ {caption_title}" if caption_title else "🎬 វីដេអូរឿងថ្មី",
+            )
+            state["video_channel_msg_id"] = sent.message_id
+
+            if caption_title:
+                state["drama_title"] = caption_title
+                drama_code = ensure_drama_code(caption_title)
+                upload_date = ensure_drama_upload_date(caption_title)
+                if video_duration > 0:
+                    save_drama_duration_in_db(caption_title, video_duration)
+                if gif_bytes:
+                    save_drama_gif_in_db(caption_title, gif_bytes)
+                state["drama_code"] = drama_code
+                state["upload_date"] = upload_date
+                state["step"] = "NEW_WAIT_CATEGORY"
+                dur_info = f"\n⏱ រយៈពេលវីដេអូ៖ {format_video_duration(video_duration)}" if video_duration > 0 else ""
+                gif_info = "\n🎞️ GIF Preview (4s)៖ បង្កើតដោយស្វ័យប្រវត្តិរួចរាល់" if gif_bytes else ""
+                send_clean_message(
+                    message,
+                    f"✅ ទទួលបានវីដេអូសម្រាប់រឿង៖ {caption_title}\n"
+                    f"🔖 CODE៖ {drama_code}\n"
+                    f"📅 ថ្ងៃ Upload៖ {upload_date}{dur_info}{gif_info}\n\n"
+                    "📂 សូមជ្រើសរើស **ប្រភេទរឿង (Category)** ឬចុច «➕ បន្ថែម Category ថ្មី»៖",
+                    reply_markup=category_keyboard(include_add_new=True),
+                )
+            else:
+                state["step"] = "NEW_WAIT_TITLE_TEXT"
+                send_clean_message(
+                    message,
+                    "✅ ទទួលបានវីដេអូ!\n\n"
+                    "📝 សូមវាយបញ្ចូល ចំណងជើងរឿង ឥឡូវនេះ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+            return
+
+        if step == "NEW_WAIT_TITLE_TEXT":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿងជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+
+            drama_title = parse_drama_title(text)
+            if not drama_title:
+                send_clean_message(message, "❌ ចំណងជើងមិនត្រឹមត្រូវ។ សូមវាយម្ដងទៀត៖", reply_markup=cancel_keyboard())
+                return
+
+            state["drama_title"] = drama_title
+            drama_code = ensure_drama_code(drama_title)
+            upload_date = ensure_drama_upload_date(drama_title)
+            video_duration = int(state.get("video_duration", 0) or 0)
+            if video_duration > 0:
+                save_drama_duration_in_db(drama_title, video_duration)
+            gif_bytes = state.get("extracted_gif")
+            if gif_bytes:
+                save_drama_gif_in_db(drama_title, gif_bytes)
+
+            state["drama_code"] = drama_code
+            state["upload_date"] = upload_date
+            state["step"] = "NEW_WAIT_CATEGORY"
+            send_clean_message(
+                message,
+                f"✅ ចំណងជើងរឿង៖ {drama_title}\n"
+                f"🔖 CODE៖ {drama_code}\n"
+                f"📅 ថ្ងៃ Upload៖ {upload_date}\n\n"
+                "📂 សូមជ្រើសរើស **ប្រភេទរឿង (Category)** ឬចុច «➕ បន្ថែម Category ថ្មី»៖",
+                reply_markup=category_keyboard(include_add_new=True),
+            )
+            return
+
+        if step == "NEW_WAIT_CATEGORY":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមជ្រើសរើសប្រភេទរឿងតាមប៊ូតុង៖", reply_markup=category_keyboard(include_add_new=True))
+                return
+
+            if text in [BTN_ADD_NEW_CAT, "➕ បញ្ចូលប្រភេទថ្មី"]:
+                state["step"] = "NEW_WAIT_CUSTOM_CATEGORY"
+                send_clean_message(
+                    message,
+                    "📝 សូមវាយបញ្ចូល **ឈ្មោះ Category ថ្មី** ជាអក្សរ (ឧ. រឿងខ្មែរ, រឿងចិន, រឿងកូរ៉េ)៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            category = clean_category_text(text)
+            state["category"] = category
+            state["step"] = "NEW_WAIT_COVER"
+            frames_list = state.get("extracted_frames") or []
+            if frames_list:
+                send_clean_message(
+                    message,
+                    f"✅ ប្រភេទរឿង៖ {category}\n\n"
+                    f"🖼️ ប្រព័ន្ធបានទាញយករូបភាព **{len(frames_list)} សន្លឹក** ពីវីដេអូ!\n"
+                    "👇 សូមចុចជ្រើសរើសរូបទី 1–4 ធ្វើជា Cover ឬចុច «📤 Upload រូប Cover ផ្ទាល់ខ្លួន» (ឬផ្ញើរូបភាពចូលផ្ទាល់)៖",
+                    reply_markup=cover_selection_keyboard(len(frames_list)),
+                )
+                send_frame_candidates_to_admin(message.chat.id, user_id, frames_list)
+            else:
+                send_clean_message(
+                    message,
+                    f"✅ ប្រភេទរឿង៖ {category}\n\n🖼️ ឥឡូវនេះ សូម Upload រូបភាព **Cover** សម្រាប់រឿងនេះ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+            return
+
+        if step == "NEW_WAIT_CUSTOM_CATEGORY":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលប្រភេទរឿងជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+
+            new_cat = clean_category_text(text)
+            save_standalone_category_in_db(new_cat)
+            state["category"] = new_cat
+            state["step"] = "NEW_WAIT_COVER"
+            frames_list = state.get("extracted_frames") or []
+            if frames_list:
+                send_clean_message(
+                    message,
+                    f"✅ បានបង្កើតប្រភេទរឿងថ្មី៖ {new_cat}\n\n"
+                    f"🖼️ ប្រព័ន្ធបានទាញយករូបភាព **{len(frames_list)} សន្លឹក** ពីវីដេអូ!\n"
+                    "👇 សូមជ្រើសរើសរូបទី 1–4 ឬ Upload រូប Cover ផ្ទាល់ខ្លួន៖",
+                    reply_markup=cover_selection_keyboard(len(frames_list)),
+                )
+                send_frame_candidates_to_admin(message.chat.id, user_id, frames_list)
+            else:
+                send_clean_message(
+                    message,
+                    f"✅ បានបង្កើតប្រភេទរឿងថ្មី៖ {new_cat}\n\n🖼️ សូម Upload រូបភាព **Cover** សម្រាប់រឿងនេះ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+            return
+
+        if step == "NEW_WAIT_COVER":
+            drama_title = state["drama_title"]
+            drama_code = state.get("drama_code") or ensure_drama_code(drama_title)
+            video_duration = int(state.get("video_duration", 0) or 0)
+            frames_list = state.get("extracted_frames") or []
+
+            if message.content_type == "text" and text == BTN_UPLOAD_CUSTOM_COVER:
+                send_clean_message(
+                    message,
+                    "📤 សូមផ្ញើរូបភាព (Photo) ពីទូរសព្ទ ឬកុំព្យូទ័ររបស់អ្នកឥឡូវនេះ ដើម្បីធ្វើជា Cover៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            chosen_frame_bytes = None
+            frame_btn_map = {
+                BTN_PICK_FRAME_1: 0,
+                BTN_PICK_FRAME_2: 1,
+                BTN_PICK_FRAME_3: 2,
+                BTN_PICK_FRAME_4: 3,
+                BTN_PICK_FRAME_5: 4,
+            }
+            if message.content_type == "text" and text in frame_btn_map:
+                idx = frame_btn_map[text]
+                if 0 <= idx < len(frames_list):
+                    chosen_frame_bytes = frames_list[idx]
+
+            if chosen_frame_bytes is None and message.content_type == "photo":
+                photo_file = bot.get_file(message.photo[-1].file_id)
+                chosen_frame_bytes = bot.download_file(photo_file.file_path)
+
+            if chosen_frame_bytes is None:
+                send_clean_message(
+                    message,
+                    "❌ សូមចុចជ្រើសរើសរូបពីប៊ូតុងខាងក្រោម ឬផ្ញើជារូបភាព (Photo) សម្រាប់ធ្វើជា Cover រឿង៖",
+                    reply_markup=cover_selection_keyboard(len(frames_list)),
+                )
+                return
+
+            state["chosen_cover_bytes"] = chosen_frame_bytes
+
+            try:
+                sent_cover = create_duration_cover_from_bytes(
+                    chosen_frame_bytes,
+                    video_duration,
+                    drama_title,
+                )
+                cover_file_id = sent_cover.photo[-1].file_id
+            except Exception:
+                log.exception("Failed to create duration cover from bytes")
+                bio = io.BytesIO(chosen_frame_bytes)
+                bio.name = "cover.jpg"
+                sent_cover = bot.send_photo(
+                    chat_id=CHANNEL_ID_VALUE,
+                    photo=bio,
+                    caption=f"🖼️ Cover រឿង៖ {drama_title} [{drama_code}]",
+                )
+                cover_file_id = sent_cover.photo[-1].file_id
+
+            save_cover(
+                drama_title=drama_title,
+                cover_file_id=cover_file_id,
+                channel_msg_id=sent_cover.message_id,
+            )
+
+            if not get_drama_gif_exists_in_db(drama_title):
+                _, fb_gif = generate_fallback_frames_and_gif_from_image(chosen_frame_bytes)
+                if fb_gif:
+                    save_drama_gif_in_db(drama_title, fb_gif)
+
+            state.pop("extracted_frames", None)
+            state.pop("extracted_gif", None)
+            state["album_uploaded_count"] = 0
+            state["step"] = "NEW_WAIT_ALBUM"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                "✅ រក្សាទុក Cover និង GIF Preview រួចរាល់!\n\n"
+                "📸 **បន្ថែមរូប Album (ដាក់បានដល់ ៣ រូប)**៖\n"
+                "សូមផ្ញើរូបភាព Album (ម្តង ១ រូប ដល់ ៣ រូប) ឬចុច «⏭ រំលង (មិនដាក់រូប Album)»៖",
+                reply_markup=album_upload_keyboard(0),
+            )
+            return
+
+        if step == "NEW_WAIT_ALBUM":
+            drama_title = state["drama_title"]
+            drama_code = state.get("drama_code") or ensure_drama_code(drama_title)
+            uploaded_count = int(state.get("album_uploaded_count", 0) or 0)
+
+            if message.content_type == "text" and text in [BTN_SKIP_ALBUM, BTN_DONE_ALBUM]:
+                state["step"] = "NEW_WAIT_SYNOPSIS"
+                send_clean_message(
+                    message,
+                    f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                    f"📸 រូប Album៖ {uploaded_count}/3 រូប\n\n"
+                    "📖 សូមវាយបញ្ចូល **អត្ថបទសង្ខេបរឿង / Tags** ឬចុច «⏭ រំលង (មិនដាក់សង្ខេប)»៖",
+                    reply_markup=skip_synopsis_keyboard(),
+                )
+                return
+
+            if message.content_type != "photo":
+                send_clean_message(
+                    message,
+                    f"❌ សូមផ្ញើជារូបភាព (Photo) សម្រាប់ដាក់ក្នុង Album ({uploaded_count}/3) ឬចុចប៊ូតុងខាងក្រោម៖",
+                    reply_markup=album_upload_keyboard(uploaded_count),
+                )
+                return
+
+            next_slot = uploaded_count + 1
+            p_file = bot.get_file(message.photo[-1].file_id)
+            p_bytes = bot.download_file(p_file.file_path)
+            save_drama_album_slot_in_db(drama_title, next_slot, p_bytes)
+            state["album_uploaded_count"] = next_slot
+
+            if next_slot >= 3:
+                state["step"] = "NEW_WAIT_SYNOPSIS"
+                send_clean_message(
+                    message,
+                    f"✅ បានរក្សាទុករូប Album គ្រប់ **3/3 រូប** ជោគជ័យ!\n\n"
+                    "📖 សូមវាយបញ្ចូល **អត្ថបទសង្ខេបរឿង / Tags** ឬចុច «⏭ រំលង (មិនដាក់សង្ខេប)»៖",
+                    reply_markup=skip_synopsis_keyboard(),
+                )
+            else:
+                send_clean_message(
+                    message,
+                    f"✅ បានរក្សាទុករូប Album ទី **{next_slot}/3**!\n"
+                    f"📤 សូមផ្ញើរូបទី {next_slot + 1} បន្តទៀត ឬចុច «{BTN_DONE_ALBUM}»៖",
+                    reply_markup=album_upload_keyboard(next_slot),
+                )
+            return
+
+        if step == "NEW_WAIT_SYNOPSIS":
+            if message.content_type != "text" or not text:
+                send_clean_message(
+                    message,
+                    "❌ សូមវាយបញ្ចូលអត្ថបទសង្ខេបរឿង ឬចុច «⏭ រំលង (មិនដាក់សង្ខេប)»៖",
+                    reply_markup=skip_synopsis_keyboard(),
+                )
+                return
+
+            drama_title = state["drama_title"]
+            if text != BTN_SKIP_SYNOPSIS:
+                save_drama_synopsis_in_db(drama_title, text)
+
+            # Point 3.1: Skip language selection (និយាយខ្មែរ / Sub ខ្មែរ) and go directly to WAIT_EP_NUMBER
+            state["step"] = "WAIT_EP_NUMBER"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title}\n\n"
+                "🔢 សូមជ្រើសរើស ឬវាយលេខភាគដំបូង៖\n"
+                "• ចុច **«1»** សម្រាប់រឿងភាគធម្មតា\n"
+                "• ចុច **«🎬 មួយភាគចប់ (Full)»** បើជារឿងមានតែ ១ ភាគចប់",
+                reply_markup=first_episode_keyboard(),
+            )
+            return
+
+        if step == "WAIT_EP_NUMBER":
+            drama_title = state["drama_title"]
+            drama_code = state.get("drama_code") or ensure_drama_code(drama_title)
+            upload_date = state.get("upload_date") or ensure_drama_upload_date(drama_title)
+            video_msg_id = state["video_channel_msg_id"]
+            ep_cov_bytes = state.get("first_ep_frame_bytes") or state.get("chosen_cover_bytes")
+
+            if text == BTN_ONE_SHOT:
+                update_channel_caption(
+                    video_msg_id,
+                    f"🎬 រឿង៖ {drama_title} [{drama_code}] | 📺 មួយភាគចប់ (Full)",
+                )
+                save_episode(
+                    drama_title=drama_title,
+                    ep_number=1,
+                    channel_msg_id=video_msg_id,
+                    category=state.get("category"),
+                )
+                if ep_cov_bytes:
+                    save_episode_cover_in_db(drama_title, 1, ep_cov_bytes)
+
+                state["step"] = "NOTIFY_CONFIRM_SEND"
+                total_users = len(get_all_started_user_ids())
+                send_clean_message(
+                    message,
+                    "✅ រក្សាទុកជារឿង **មួយភាគចប់ (Full)** បានជោគជ័យ!\n\n"
+                    f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                    f"📅 ថ្ងៃ Upload៖ {upload_date}\n"
+                    f"🗂 ប្រភេទ៖ {state.get('category')}\n\n"
+                    f"🔔 តើអ្នកចង់ផ្ញើ Notification រឿងថ្មីនេះទៅកាន់ **User Bot Chat** ({total_users} នាក់) ឥឡូវនេះដែរឬទេ?",
+                    reply_markup=notify_prompt_keyboard(),
+                )
+                return
+
+            if message.content_type != "text" or not text.isdigit():
+                send_clean_message(
+                    message,
+                    "❌ សូមបញ្ចូលលេខភាគជា លេខគត់ (ឧ. 1) ឬចុច «🎬 មួយភាគចប់ (Full)»៖",
+                    reply_markup=first_episode_keyboard(),
+                )
+                return
+
+            ep_number = int(text)
+            if ep_number < 1:
+                send_clean_message(message, "❌ លេខភាគត្រូវតែចាប់ពីលេខ 1 ឡើងទៅ៖", reply_markup=first_episode_keyboard())
+                return
+
+            update_channel_caption(
+                video_msg_id,
+                f"🎬 រឿង៖ {drama_title} [{drama_code}] | 📺 ភាគទី {ep_number}",
+            )
+
+            save_episode(
+                drama_title=drama_title,
+                ep_number=ep_number,
+                channel_msg_id=video_msg_id,
+                category=state.get("category"),
+            )
+            if ep_cov_bytes:
+                save_episode_cover_in_db(drama_title, ep_number, ep_cov_bytes)
+
+            next_ep = ep_number + 1
+            state["last_saved_ep"] = ep_number
+            state["next_ep"] = next_ep
+            state["step"] = "AUTO_NEXT_EP_WAIT_VIDEO"
+            state.pop("video_channel_msg_id", None)
+            state.pop("first_ep_frame_bytes", None)
+            state.pop("chosen_cover_bytes", None)
+
+            send_clean_message(
+                message,
+                "✅ រក្សាទុកភាគរឿង និងរូប Cover ភាគរួចរាល់!\n\n"
+                f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                f"📺 ភាគទី៖ {ep_number}\n\n"
+                f"🤖 បើមានភាគបន្ត គ្រាន់តែ **Upload វីដេអូ** ចូល វានឹងដាក់ជា **ភាគទី {next_ep} (Auto)**!\n"
+                f"🖼️ (បើចង់ប្ដូររូប Cover ភាគទី {ep_number} ផ្ទាល់ខ្លួន អាចផ្ញើរូប Photo ចូលឥឡូវនេះបាន)\n"
+                "🔔 ឬចុច **«🔔 ផ្ញើ Notification ឥឡូវនេះ»** ដើម្បីផ្ញើចូល User Bot Chat។",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True, row_width=1).add(
+                    KeyboardButton(BTN_SEND_NOTIF_NOW),
+                    KeyboardButton(BTN_NOTIF_UPLOAD_COVER),
+                    KeyboardButton(BTN_CANCEL),
+                ),
+            )
+            return
+
+        # =================================================
+        # FLOW 2: បន្ថែមភាគ និង AUTO រាប់លេខភាគបន្តបន្ទាប់ + EPISODE COVER
+        # =================================================
+        if step == "ADD_WAIT_TITLE":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង ឬ CODE ជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ ចំណងជើងមិនត្រឹមត្រូវ។ សូមវាយម្ដងទៀត៖", reply_markup=cancel_keyboard())
+                return
+
+            drama_code = ensure_drama_code(drama_title)
+            next_ep = get_next_episode_number(drama_title)
+            state["drama_title"] = drama_title
+            state["drama_code"] = drama_code
+            state["next_ep"] = next_ep
+            state["step"] = "AUTO_NEXT_EP_WAIT_VIDEO"
+
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                f"🤖 ភាគបន្ទាប់ដែលនឹងដាក់ Auto គឺ៖ **ភាគទី {next_ep}**\n\n"
+                "📹 សូម **Upload វីដេអូ** ចូលឥឡូវនេះ៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "AUTO_NEXT_EP_WAIT_VIDEO":
+            drama_title = state["drama_title"]
+            drama_code = state.get("drama_code") or ensure_drama_code(drama_title)
+            next_ep = state.get("next_ep") or get_next_episode_number(drama_title)
+            last_saved_ep = state.get("last_saved_ep")
+
+            if message.content_type == "text" and text == BTN_NOTIF_UPLOAD_COVER:
+                state["step"] = "NOTIFY_WAIT_CUSTOM_COVER"
+                send_clean_message(
+                    message,
+                    f"📤 សូមផ្ញើរូបភាព (Photo) ថ្មីសម្រាប់ធ្វើជា Cover នៃសារ Notification រឿង «{drama_title}» ({drama_code})៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if message.content_type == "text" and text == BTN_SEND_NOTIF_NOW:
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"🚀 កំពុងផ្ញើ Notification រឿង «{drama_title}» ({drama_code}) ទៅកាន់ **User Bot Chat** របស់អ្នកប្រើប្រាស់ទាំងអស់...",
+                    reply_markup=main_menu_keyboard(),
+                )
+                broadcast_new_drama_notification_async(drama_title, message.chat.id)
+                return
+
+            # អនុញ្ញាតឱ្យ Admin ផ្ញើរូប Photo ភ្លាមៗដើម្បីប្ដូររូប Cover ភាគដែលទើបដាក់មុននេះ (ឬភាគបន្ទាប់)
+            if message.content_type == "photo":
+                target_ep_for_cov = last_saved_ep or next_ep
+                p_file = bot.get_file(message.photo[-1].file_id)
+                p_bytes = bot.download_file(p_file.file_path)
+                save_episode_cover_in_db(drama_title, target_ep_for_cov, p_bytes)
+                send_clean_message(
+                    message,
+                    f"🖼️ បានប្ដូររូប Cover សម្រាប់ **ភាគទី {target_ep_for_cov}** នៃរឿង «{drama_title}» ជោគជ័យ!\n\n"
+                    f"📹 សូម Upload វីដេអូសម្រាប់ **ភាគទី {next_ep}** បន្តទៀត ឬចុចប៊ូតុងខាងក្រោម៖",
+                    reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(
+                        KeyboardButton(BTN_SEND_NOTIF_NOW),
+                        KeyboardButton(BTN_CANCEL),
+                    ),
+                )
+                return
+
+            if message.content_type == "text" and text.isdigit() and int(text) >= 1:
+                state["next_ep"] = int(text)
+                send_clean_message(
+                    message,
+                    f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                    f"🔢 បានប្ដូរលេខភាគបន្ទាប់ទៅជា៖ **ភាគទី {state['next_ep']}**\n\n"
+                    "📹 សូម **Upload វីដេអូ** ចូលឥឡូវនេះ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if not is_valid_video(message):
+                send_clean_message(
+                    message,
+                    f"📹 សូម Upload វីដេអូសម្រាប់រឿង «{drama_title}» (Auto ភាគទី {next_ep})\n"
+                    "🖼️ ឬផ្ញើរូបភាព (Photo) ដើម្បីប្ដូររូប Cover ភាគ\n"
+                    "ឬចុច «❌ បោះបង់» ដើម្បីបញ្ចប់ការងារ។",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            caption_text = message.caption.strip() if message.caption else ""
+            if caption_text.isdigit() and int(caption_text) >= 1:
+                ep_number = int(caption_text)
+            else:
+                ep_number = next_ep
+
+            if message.content_type == "video" and getattr(message, "video", None):
+                vdur = int(message.video.duration or 0)
+                if vdur > 0 and get_drama_duration_from_db(drama_title) == 0:
+                    save_drama_duration_in_db(drama_title, vdur)
+
+            ep_frame_bytes = extract_single_frame_from_video_message(message)
+
+            sent = copy_to_channel(
+                message,
+                custom_caption=f"🎬 រឿង៖ {drama_title} [{drama_code}] | 📺 ភាគទី {ep_number}",
+            )
+
+            category = state.get("category") or get_drama_category(drama_title)
+            state["category"] = category
+
+            save_episode(
+                drama_title=drama_title,
+                ep_number=ep_number,
+                channel_msg_id=sent.message_id,
+                category=category,
+            )
+
+            if ep_frame_bytes:
+                save_episode_cover_in_db(drama_title, ep_number, ep_frame_bytes)
+
+            state["last_saved_ep"] = ep_number
+            state["next_ep"] = ep_number + 1
+
+            send_clean_message(
+                message,
+                "✅ រក្សាទុកភាគរឿង និងរូប Cover ភាគដោយស្វ័យប្រវត្តិ (Auto) ជោគជ័យ!\n\n"
+                f"🎬 រឿង៖ {drama_title} ({drama_code})\n"
+                f"📺 ភាគទី៖ {ep_number}\n\n"
+                f"🤖 សូម **Upload វីដេអូបន្ទាប់** (វានឹងដាក់ជា **ភាគទី {state['next_ep']}** Auto)\n"
+                f"🖼️ (បើចង់ប្ដូររូប Cover ភាគទី {ep_number} អាចផ្ញើរូប Photo ចូលឥឡូវនេះបាន)\n"
+                "👉 ឬចុច «🔔 ផ្ញើ Notification ឥឡូវនេះ» / «❌ បោះបង់»។",
+                reply_markup=ReplyKeyboardMarkup(resize_keyboard=True, row_width=1).add(
+                    KeyboardButton(BTN_SEND_NOTIF_NOW),
+                    KeyboardButton(BTN_NOTIF_UPLOAD_COVER),
+                    KeyboardButton(BTN_CANCEL),
+                ),
+            )
+            return
+
+        # =================================================
+        # FLOW 3: កែរឿង, កែ COVER ភាគ, កែរូប ALBUM (៣រូប), GIF, TAGS & CATEGORY
+        # =================================================
+        if step == "EDIT_CHOOSE_TYPE":
+            if text == BTN_EDIT_TITLE:
+                state["step"] = "EDIT_TITLE_OLD"
+                send_clean_message(
+                    message,
+                    "📝 កែចំណងជើងរឿង\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿងចាស់** ឬ **CODE** ដែលអ្នកចង់កែ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_EDIT_EP:
+                state["step"] = "EDIT_EP_TITLE"
+                send_clean_message(
+                    message,
+                    "🔢 កែលេខភាគ\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE** ដែលអ្នកចង់កែលេខភាគ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_EDIT_CATEGORY:
+                state["step"] = "EDIT_CAT_TITLE"
+                send_clean_message(
+                    message,
+                    "🗂 ប្ដូរប្រភេទឱ្យរឿង\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+
+
+            if text == BTN_EDIT_COVER:
+                state["step"] = "EDIT_COVER_TITLE"
+                send_clean_message(
+                    message,
+                    "🖼️ ប្ដូររូប Cover រឿង\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_EDIT_EP_COVER:
+                state["step"] = "EDIT_EP_COV_TITLE"
+                send_clean_message(
+                    message,
+                    "🖼️ ប្ដូររូប Cover តាមភាគរឿង\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_EDIT_ALBUM:
+                state["step"] = "EDIT_ALBUM_TITLE"
+                send_clean_message(
+                    message,
+                    "📸 កែ/ដាក់រូប Album (ដាក់បានដល់ ៣ រូប)\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_EDIT_GIF:
+                state["step"] = "EDIT_GIF_TITLE"
+                send_clean_message(
+                    message,
+                    "🎞️ ប្ដូរ GIF Preview (3–5 វិនាទី)\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_EDIT_SYNOPSIS:
+                state["step"] = "EDIT_SYNOPSIS_TITLE"
+                send_clean_message(
+                    message,
+                    "📖 កែសង្ខេបរឿង\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_EDIT_TAGS:
+                state["step"] = "EDIT_TAGS_TITLE"
+                send_clean_message(
+                    message,
+                    "🏷 កែ Tags / Keywords\n\nសូមវាយបញ្ចូល **ចំណងជើងរឿង** ឬ **CODE**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_MANAGE_CATEGORY:
+                state["step"] = "MANAGE_CAT_SELECT"
+                send_clean_message(
+                    message,
+                    "⚙️ គ្រប់គ្រង Category\n\nចុចលើឈ្មោះ Category ដើម្បីកែ ឬលុប ឬបន្ថែមថ្មី៖",
+                    reply_markup=category_keyboard(include_add_new=True),
+                )
+                return
+
+            send_clean_message(message, "សូមជ្រើសរើសតាមប៊ូតុងខាងក្រោម៖", reply_markup=edit_menu_keyboard())
+            return
+
+        # -------------------------------------------------
+        # EDIT EPISODE COVER (REQ 3)
+        # -------------------------------------------------
+        if step == "EDIT_EP_COV_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង ឬ CODE៖", reply_markup=cancel_keyboard())
+                return
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_EP_COV_NUM"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n\n"
+                "🔢 សូមវាយបញ្ចូល **លេខភាគ** ដែលអ្នកចង់ប្ដូររូប Cover (ឧ. 1, 2, 3...)៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_EP_COV_NUM":
+            if not text.isdigit() or int(text) < 1:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលលេខភាគជាលេខគត់ (ចាប់ពី 1 ឡើងទៅ)៖", reply_markup=cancel_keyboard())
+                return
+            ep_num = int(text)
+            drama_title = state["drama_title"]
+            if not find_episode(drama_title, ep_num):
+                send_clean_message(
+                    message,
+                    f"❌ រកមិនឃើញភាគទី {ep_num} ក្នុងរឿង «{drama_title}» ទេ។ សូមវាយលេខភាគម្ដងទៀត៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+            state["ep_number"] = ep_num
+            state["step"] = "EDIT_EP_COV_WAIT_PHOTO"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} | 📺 ភាគទី {ep_num}\n\n"
+                "🖼️ សូម Upload **រូបភាព (Photo)** ឬផ្ញើវីដេអូ ដើម្បីដាក់ធ្វើជា Cover សម្រាប់ភាគទី "
+                f"{ep_num}៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_EP_COV_WAIT_PHOTO":
+            drama_title = state["drama_title"]
+            ep_num = int(state["ep_number"])
+            photo_bytes = None
+
+            if message.content_type == "photo":
+                p_info = bot.get_file(message.photo[-1].file_id)
+                photo_bytes = bot.download_file(p_info.file_path)
+            elif is_valid_video(message):
+                photo_bytes = extract_single_frame_from_video_message(message)
+
+            if not photo_bytes:
+                send_clean_message(
+                    message,
+                    "❌ សូមផ្ញើជារូបភាព (Photo) ឬវីដេអូ៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            ok = save_episode_cover_in_db(drama_title, ep_num, photo_bytes)
+            admin_states.pop(user_id, None)
+            if ok:
+                send_clean_message(
+                    message,
+                    f"✅ បានរក្សាទុករូប Cover សម្រាប់ **ភាគទី {ep_num}** នៃរឿង «{drama_title}» បានជោគជ័យ!",
+                    reply_markup=main_menu_keyboard(),
+                )
+            else:
+                send_clean_message(
+                    message,
+                    "❌ មានបញ្ហាក្នុងការរក្សាទុករូប Cover ភាគ។",
+                    reply_markup=main_menu_keyboard(),
+                )
+            return
+
+        # -------------------------------------------------
+        # EDIT ALBUM PHOTOS (REQ 5: UP TO 3 PHOTOS)
+        # -------------------------------------------------
+        if step == "EDIT_ALBUM_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង ឬ CODE៖", reply_markup=cancel_keyboard())
+                return
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_ALBUM_ACTION"
+            cur_count = get_drama_album_count_from_db(drama_title)
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n"
+                f"📸 រូប Album បច្ចុប្បន្ន៖ **{cur_count}/3 រូប**\n\n"
+                "សូមជ្រើសរើសមុខងារខាងក្រោម៖",
+                reply_markup=edit_album_action_keyboard(),
+            )
+            return
+
+        if step == "EDIT_ALBUM_ACTION":
+            drama_title = state["drama_title"]
+            if text == BTN_CLEAR_ALBUM:
+                clear_drama_album_in_db(drama_title)
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"🗑️ បានលុបរូប Album ទាំងអស់របស់រឿង «{drama_title}» រួចរាល់!",
+                    reply_markup=main_menu_keyboard(),
+                )
+                return
+
+            if text == BTN_UPLOAD_NEW_ALBUM:
+                clear_drama_album_in_db(drama_title)
+                state["album_uploaded_count"] = 0
+                state["step"] = "EDIT_ALBUM_WAIT_PHOTOS"
+                send_clean_message(
+                    message,
+                    f"📤 សូមផ្ញើរូបភាព (Photo) សម្រាប់ដាក់ក្នុង Album នៃរឿង «{drama_title}» (ដាក់បានដល់ ៣ រូប)៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            send_clean_message(message, "សូមជ្រើសរើសតាមប៊ូតុងខាងក្រោម៖", reply_markup=edit_album_action_keyboard())
+            return
+
+        if step == "EDIT_ALBUM_WAIT_PHOTOS":
+            drama_title = state["drama_title"]
+            uploaded_count = int(state.get("album_uploaded_count", 0) or 0)
+
+            if message.content_type == "text" and text == BTN_DONE_ALBUM:
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"✅ បានរក្សាទុករូប Album ចំនួន **{uploaded_count}/3 រូប** សម្រាប់រឿង «{drama_title}» ជោគជ័យ!",
+                    reply_markup=main_menu_keyboard(),
+                )
+                return
+
+            if message.content_type != "photo":
+                send_clean_message(
+                    message,
+                    f"❌ សូមផ្ញើជារូបភាព (Photo) ({uploaded_count}/3) ឬចុចប៊ូតុងខាងក្រោម៖",
+                    reply_markup=album_upload_keyboard(uploaded_count),
+                )
+                return
+
+            next_slot = uploaded_count + 1
+            p_file = bot.get_file(message.photo[-1].file_id)
+            p_bytes = bot.download_file(p_file.file_path)
+            save_drama_album_slot_in_db(drama_title, next_slot, p_bytes)
+            state["album_uploaded_count"] = next_slot
+
+            if next_slot >= 3:
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"✅ បានរក្សាទុករូប Album គ្រប់ **3/3 រូប** សម្រាប់រឿង «{drama_title}» បានជោគជ័យ!",
+                    reply_markup=main_menu_keyboard(),
+                )
+            else:
+                send_clean_message(
+                    message,
+                    f"✅ បានរក្សាទុករូប Album ទី **{next_slot}/3**!\n"
+                    f"📤 សូមផ្ញើរូបទី {next_slot + 1} បន្តទៀត ឬចុច «{BTN_DONE_ALBUM}»៖",
+                    reply_markup=album_upload_keyboard(next_slot),
+                )
+            return
+
+        # -------------------------------------------------
+        # EDIT GIF, TAGS, LANG, SYNOPSIS, COVER, CATEGORY
+        # -------------------------------------------------
+        if step == "EDIT_GIF_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង ឬ CODE៖", reply_markup=cancel_keyboard())
+                return
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_GIF_WAIT_MEDIA"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n\n"
+                "🎞️ សូមផ្ញើ **វីដេអូខ្លី / វីដេអូរឿង** (ប្រព័ន្ធនឹងកាត់យក 4 វិនាទីធ្វើ GIF ស្វ័យប្រវត្តិ) ឬផ្ញើជាឯកសារ **GIF / Animation** ផ្ទាល់៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_GIF_WAIT_MEDIA":
+            drama_title = state["drama_title"]
+            gif_bytes = None
+
+            if message.content_type == "animation" and getattr(message, "animation", None):
+                f_info = bot.get_file(message.animation.file_id)
+                gif_bytes = bot.download_file(f_info.file_path)
+            elif is_valid_video(message):
+                _, gif_bytes = extract_video_frames_and_gif(message)
+            elif message.content_type == "photo":
+                p_info = bot.get_file(message.photo[-1].file_id)
+                p_bytes = bot.download_file(p_info.file_path)
+                _, gif_bytes = generate_fallback_frames_and_gif_from_image(p_bytes)
+
+            if not gif_bytes:
+                send_clean_message(
+                    message,
+                    "❌ មិនអាចបង្កើត GIF បានទេ។ សូមផ្ញើជា GIF Animation, វីដេអូ (<20MB) ឬរូបភាព៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            ok = save_drama_gif_in_db(drama_title, gif_bytes)
+            admin_states.pop(user_id, None)
+            if ok:
+                send_clean_message(
+                    message,
+                    f"✅ បានរក្សាទុក GIF Preview (Loop ស្វ័យប្រវត្តិ) សម្រាប់រឿង «{drama_title}» ជោគជ័យ!",
+                    reply_markup=main_menu_keyboard(),
+                )
+            else:
+                send_clean_message(
+                    message,
+                    "❌ មានបញ្ហាក្នុងការរក្សាទុក GIF Preview។",
+                    reply_markup=main_menu_keyboard(),
+                )
+            return
+
+        if step == "EDIT_TAGS_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង ឬ CODE៖", reply_markup=cancel_keyboard())
+                return
+            current_tags = get_drama_tags_from_db(drama_title)
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_TAGS_WAIT_TEXT"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n"
+                f"🏷 Tags បច្ចុប្បន្ន៖ {current_tags or 'មិនទាន់មាន'}\n\n"
+                "✍️ សូមវាយបញ្ចូល **Tags / Keywords ថ្មី**៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_TAGS_WAIT_TEXT":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូល Tags ជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+            drama_title = state["drama_title"]
+            save_drama_tags_in_db(drama_title, text)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានរក្សាទុក Tags សម្រាប់រឿង «{drama_title}» ជោគជ័យ!",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "EDIT_LANG_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង៖", reply_markup=cancel_keyboard())
+                return
+
+            current_lang = get_drama_lang_from_db(drama_title)
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_LANG_WAIT_CHOICE"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n"
+                f"🎧 ប្រភេទបច្ចុប្បន្ន៖ {current_lang}\n\n"
+                "👇 សូមជ្រើសរើស **ប្រភេទសំឡេងថ្មី** ខាងក្រោម៖",
+                reply_markup=lang_choice_keyboard(),
+            )
+            return
+
+        if step == "EDIT_LANG_WAIT_CHOICE":
+            if message.content_type != "text" or text not in [BTN_LANG_DUB, BTN_LANG_SUB]:
+                send_clean_message(
+                    message,
+                    "❌ សូមចុចជ្រើសរើស «🎙 និយាយខ្មែរ» ឬ «📝 Sub ខ្មែរ»៖",
+                    reply_markup=lang_choice_keyboard(),
+                )
+                return
+
+            drama_title = state["drama_title"]
+            lang_code = "sub" if text == BTN_LANG_SUB else "dub"
+            save_drama_lang_in_db(drama_title, lang_code)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានប្ដូរប្រភេទសំឡេងសម្រាប់រឿង «{drama_title}» ទៅជា «{text}» ជោគជ័យ!",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "EDIT_SYNOPSIS_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង៖", reply_markup=cancel_keyboard())
+                return
+
+            current_syn = get_drama_synopsis_from_db(drama_title)
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_SYNOPSIS_WAIT_TEXT"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n"
+                f"📖 សង្ខេបបច្ចុប្បន្ន៖ {current_syn or 'មិនទាន់មាន'}\n\n"
+                "✍️ សូមវាយបញ្ចូល **អត្ថបទសង្ខេបរឿងថ្មី** ឥឡូវនេះ៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_SYNOPSIS_WAIT_TEXT":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលអត្ថបទសង្ខេបរឿងជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+
+            drama_title = state["drama_title"]
+            save_drama_synopsis_in_db(drama_title, text)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានរក្សាទុកអត្ថបទសង្ខេបសម្រាប់រឿង «{drama_title}» ជោគជ័យ!",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "EDIT_COVER_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង ឬ CODE៖", reply_markup=cancel_keyboard())
+                return
+
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_COVER_WAIT_PHOTO"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n\n"
+                "🖼️ សូម Upload **រូបភាព Cover ថ្មី** (Photo) ឬផ្ញើវីដេអូដើម្បីទាញយក Frame 3–5 សន្លឹក៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_COVER_WAIT_PHOTO":
+            drama_title = state["drama_title"]
+            drama_code = ensure_drama_code(drama_title)
+            saved_duration = get_drama_duration_from_db(drama_title)
+            frames_list = state.get("edit_extracted_frames") or []
+
+            if is_valid_video(message):
+                ext_frames, _ = extract_video_frames_and_gif(message)
+                if ext_frames:
+                    state["edit_extracted_frames"] = ext_frames
+                    send_clean_message(
+                        message,
+                        f"🖼️ បានទាញយករូបភាព **{len(ext_frames)} សន្លឹក** ពីវីដេអូ!\n"
+                        "👇 សូមចុចជ្រើសរើសរូបទី 1–4 ឬ Upload រូបភាពផ្ទាល់ខ្លួន៖",
+                        reply_markup=cover_selection_keyboard(len(ext_frames)),
+                    )
+                    send_frame_candidates_to_admin(message.chat.id, user_id, ext_frames)
+                    return
+
+            chosen_bytes = None
+            frame_btn_map = {
+                BTN_PICK_FRAME_1: 0,
+                BTN_PICK_FRAME_2: 1,
+                BTN_PICK_FRAME_3: 2,
+                BTN_PICK_FRAME_4: 3,
+                BTN_PICK_FRAME_5: 4,
+            }
+            if message.content_type == "text" and text in frame_btn_map:
+                idx = frame_btn_map[text]
+                if 0 <= idx < len(frames_list):
+                    chosen_bytes = frames_list[idx]
+
+            if chosen_bytes is None and message.content_type == "photo":
+                p_file = bot.get_file(message.photo[-1].file_id)
+                chosen_bytes = bot.download_file(p_file.file_path)
+
+            if chosen_bytes is None:
+                send_clean_message(
+                    message,
+                    "❌ សូមផ្ញើជារូបភាព (Photo) ឬជ្រើសរើសរូបពីប៊ូតុងខាងក្រោម៖",
+                    reply_markup=cover_selection_keyboard(len(frames_list)),
+                )
+                return
+
+            try:
+                sent_cover = create_duration_cover_from_bytes(chosen_bytes, saved_duration, drama_title)
+                cover_file_id = sent_cover.photo[-1].file_id
+            except Exception:
+                log.exception("Failed to draw duration badge on updated cover")
+                bio = io.BytesIO(chosen_bytes)
+                bio.name = "cover.jpg"
+                sent_cover = bot.send_photo(
+                    chat_id=CHANNEL_ID_VALUE,
+                    photo=bio,
+                    caption=f"🖼️ Cover រឿង៖ {drama_title} [{drama_code}]",
+                )
+                cover_file_id = sent_cover.photo[-1].file_id
+
+            save_cover(
+                drama_title=drama_title,
+                cover_file_id=cover_file_id,
+                channel_msg_id=sent_cover.message_id,
+            )
+
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានប្ដូររូប Cover ថ្មីសម្រាប់រឿង «{drama_title}» ({drama_code}) ជោគជ័យ!",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "MANAGE_CAT_SELECT":
+            if text in [BTN_ADD_NEW_CAT, "➕ បញ្ចូលប្រភេទថ្មី"]:
+                state["step"] = "MANAGE_CAT_CREATE_NEW"
+                send_clean_message(
+                    message,
+                    "➕ បន្ថែម Category ថ្មី\n\nសូមវាយបញ្ចូល **ឈ្មោះ Category ថ្មី**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            selected_cat = clean_category_text(text)
+            if not selected_cat:
+                send_clean_message(message, "សូមជ្រើសរើស Category៖", reply_markup=category_keyboard(include_add_new=True))
+                return
+
+            state["target_category"] = selected_cat
+            state["step"] = "MANAGE_CAT_ACTION"
+
+            act_kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+            act_kb.add(
+                KeyboardButton(BTN_RENAME_CAT_ACTION),
+                KeyboardButton(BTN_DELETE_CAT_ACTION),
+                KeyboardButton(BTN_CANCEL),
+            )
+            send_clean_message(
+                message,
+                f"🗂 Category ដែលបានជ្រើសរើស៖ «{selected_cat}»\n\nតើអ្នកចង់ធ្វើអ្វីជាមួយ Category នេះ?",
+                reply_markup=act_kb,
+            )
+            return
+
+        if step == "MANAGE_CAT_CREATE_NEW":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលឈ្មោះ Category ជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+
+            new_cat = clean_category_text(text)
+            if not new_cat:
+                send_clean_message(message, "❌ ឈ្មោះមិនត្រឹមត្រូវទេ សូមវាយម្ដងទៀត៖", reply_markup=cancel_keyboard())
+                return
+
+            save_standalone_category_in_db(new_cat)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានបន្ថែម Category ថ្មី «{new_cat}» ចូលក្នុងប្រព័ន្ធ និង Mini App រួចរាល់!",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "MANAGE_CAT_ACTION":
+            target_cat = state.get("target_category")
+            if text == BTN_RENAME_CAT_ACTION:
+                state["step"] = "MANAGE_CAT_NEW_NAME"
+                send_clean_message(
+                    message,
+                    f"✏️ កែឈ្មោះ Category «{target_cat}»\n\nសូមវាយបញ្ចូល **ឈ្មោះ Category ថ្មី**៖",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
+
+            if text == BTN_DELETE_CAT_ACTION:
+                count = delete_category_globally_in_db(target_cat)
+                admin_states.pop(user_id, None)
+                send_clean_message(
+                    message,
+                    f"🗑️ បានលុប Category «{target_cat}» ចេញពីប្រព័ន្ធទាំងស្រុងរួចរាល់!\n"
+                    f"(បានដក Category នេះចេញពី {count} ភាគរឿង)។",
+                    reply_markup=main_menu_keyboard(),
+                )
+                return
+
+            send_clean_message(message, "សូមជ្រើសរើសតាមប៊ូតុងខាងក្រោម៖", reply_markup=cancel_keyboard())
+            return
+
+        if step == "MANAGE_CAT_NEW_NAME":
+            new_cat = clean_category_text(text)
+            old_cat = state.get("target_category")
+            if not new_cat:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលឈ្មោះ Category ថ្មី៖", reply_markup=cancel_keyboard())
+                return
+
+            count = rename_category_globally_in_db(old_cat, new_cat)
+            admin_states.pop(user_id, None)
+            send_clean_message(
+                message,
+                f"✅ បានប្ដូរឈ្មោះ Category ពី «{old_cat}» ទៅជា «{new_cat}» ជោគជ័យ! (អាប់ដេតលើ {count} ភាគរឿង)",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        if step == "EDIT_TITLE_OLD":
+            old_title = resolve_drama_title_or_code(text)
+            if not old_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿងចាស់៖", reply_markup=cancel_keyboard())
+                return
+
+            state["old_title"] = old_title
+            state["step"] = "EDIT_TITLE_NEW"
+            send_clean_message(
+                message,
+                f"ចំណងជើងចាស់៖ {old_title} ({ensure_drama_code(old_title)})\n\n"
+                "សូមវាយបញ្ចូល **ចំណងជើងរឿងថ្មី**៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_TITLE_NEW":
+            new_title = parse_drama_title(text)
+            if not new_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿងថ្មី៖", reply_markup=cancel_keyboard())
+                return
+
+            old_title = state["old_title"]
+            preserved_code = ensure_drama_code(old_title)
+            preserved_date = ensure_drama_upload_date(old_title)
+            updated = update_drama_title_in_db(old_title, new_title)
+            admin_states.pop(user_id, None)
+
+            if updated:
+                send_clean_message(
+                    message,
+                    f"✅ បានប្ដូរចំណងជើងរឿងពី «{old_title}» ទៅជា «{new_title}» បានជោគជ័យ!\n"
+                    f"🔖 CODE៖ {preserved_code} | 📅 ថ្ងៃ Upload៖ {preserved_date}",
+                    reply_markup=main_menu_keyboard(),
+                )
+            else:
+                send_clean_message(
+                    message,
+                    f"❌ រកមិនឃើញរឿងឈ្មោះ «{old_title}» នៅក្នុងប្រព័ន្ធទេ។",
+                    reply_markup=main_menu_keyboard(),
+                )
+            return
+
+        if step == "EDIT_EP_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង៖", reply_markup=cancel_keyboard())
+                return
+
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_EP_OLD"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n\n"
+                "សូមវាយបញ្ចូល **លេខភាគចាស់** ដែលអ្នកចង់កែ (ជាលេខ)៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_EP_OLD":
+            if not text.isdigit():
+                send_clean_message(message, "❌ សូមបញ្ចូលលេខភាគចាស់ជា លេខគត់៖", reply_markup=cancel_keyboard())
+                return
+
+            state["old_ep"] = int(text)
+            state["step"] = "EDIT_EP_NEW"
+            send_clean_message(
+                message,
+                f"លេខភាគចាស់៖ {state['old_ep']}\n\nសូមវាយបញ្ចូល **លេខភាគថ្មី** (ជាលេខ)៖",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if step == "EDIT_EP_NEW":
+            if not text.isdigit() or int(text) < 1:
+                send_clean_message(message, "❌ សូមបញ្ចូលលេខភាគថ្មីជា លេខគត់ (ចាប់ពី 1 ឡើងទៅ)៖", reply_markup=cancel_keyboard())
+                return
+
+            new_ep = int(text)
+            drama_title = state["drama_title"]
+            old_ep = state["old_ep"]
+
+            _, msg = update_episode_number_in_db(drama_title, old_ep, new_ep)
+            admin_states.pop(user_id, None)
+            send_clean_message(message, msg, reply_markup=main_menu_keyboard())
+            return
+
+        if step == "EDIT_CAT_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង៖", reply_markup=cancel_keyboard())
+                return
+
+            current_cat = get_drama_category(drama_title)
+            state["drama_title"] = drama_title
+            state["step"] = "EDIT_CAT_NEW"
+            send_clean_message(
+                message,
+                f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n"
+                f"🗂 ប្រភេទបច្ចុប្បន្ន៖ {current_cat or 'មិនទាន់កំណត់'}\n\n"
+                "📂 សូមជ្រើសរើស **ប្រភេទថ្មី** ឬចុចបន្ថែមថ្មី៖",
+                reply_markup=category_keyboard(include_add_new=True),
+            )
+            return
+
+        if step == "EDIT_CAT_NEW":
+            if text in [BTN_ADD_NEW_CAT, "➕ បញ្ចូលប្រភេទថ្មី"]:
+                state["step"] = "EDIT_CAT_CUSTOM"
+                send_clean_message(message, "📝 សូមវាយបញ្ចូល **ឈ្មោះ Category ថ្មី** ជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+
+            category = clean_category_text(text)
+            updated = update_drama_category_in_db(state["drama_title"], category)
+            admin_states.pop(user_id, None)
+
+            if updated:
+                send_clean_message(
+                    message,
+                    f"✅ បានប្ដូរប្រភេទរឿង «{state['drama_title']}» ទៅជា «{category}» ជោគជ័យ!",
+                    reply_markup=main_menu_keyboard(),
+                )
+            else:
+                send_clean_message(message, f"❌ រកមិនឃើញរឿង «{state['drama_title']}» នេះទេ។", reply_markup=main_menu_keyboard())
+            return
+
+        if step == "EDIT_CAT_CUSTOM":
+            if message.content_type != "text" or not text:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលជាអក្សរ៖", reply_markup=cancel_keyboard())
+                return
+
+            category = clean_category_text(text)
+            updated = update_drama_category_in_db(state["drama_title"], category)
+            admin_states.pop(user_id, None)
+
+            if updated:
+                send_clean_message(
+                    message,
+                    f"✅ បានបង្កើត និងប្ដូរប្រភេទរឿង «{state['drama_title']}» ទៅជា «{category}» ជោគជ័យ!",
+                    reply_markup=main_menu_keyboard(),
+                )
+            else:
+                send_clean_message(message, f"❌ រកមិនឃើញរឿង «{state['drama_title']}» នេះទេ។", reply_markup=main_menu_keyboard())
+            return
+
+        # =================================================
+        # FLOW 4: លុបរឿង ឬ លុបភាគ
+        # =================================================
+        if step == "DELETE_CHOOSE_TYPE":
+            if text in [BTN_DEL_ALL_DRAMA, BTN_DEL_SINGLE_EP]:
+                dramas = get_all_drama_titles()
+                if not dramas:
+                    admin_states.pop(user_id, None)
+                    send_clean_message(message, "❌ មិនទាន់មានរឿងនៅក្នុងប្រព័ន្ធនៅឡើយទេ។", reply_markup=main_menu_keyboard())
+                    return
+
+                state["dramas_list"] = dramas
+                state["page"] = 0
+                state["delete_mode"] = "ALL" if text == BTN_DEL_ALL_DRAMA else "SINGLE_EP"
+                state["step"] = "DEL_SELECT_DRAMA_PAGE"
+
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, 0, 10)
+                mode_label = "💥 លុបរឿងទាំងមូល" if state["delete_mode"] == "ALL" else "✂️ លុបតែមួយភាគ"
+
+                send_clean_message(
+                    message,
+                    f"{mode_label}\n"
+                    f"📄 ទំព័រទី {cur_page + 1} / {total_pages} (សរុប {len(dramas)} រឿង)\n\n"
+                    "👇 សូមចុចជ្រើសរើស **ឈ្មោះរឿង** (ឬវាយ CODE) ដែលអ្នកចង់លុប៖",
+                    reply_markup=kb,
+                )
+                return
+
+            send_clean_message(
+                message,
+                "សូមជ្រើសរើសតាមប៊ូតុងខាងក្រោម៖",
+                reply_markup=delete_menu_keyboard(),
+            )
+            return
+
+        if step == "DEL_SELECT_DRAMA_PAGE":
+            dramas = state.get("dramas_list") or []
+            page = state.get("page", 0)
+
+            if text == BTN_NEXT_PAGE:
+                page += 1
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10)
+                state["page"] = cur_page
+                send_clean_message(
+                    message,
+                    f"📄 ទំព័រទី {cur_page + 1} / {total_pages} (សរុប {len(dramas)} រឿង)\n"
+                    "👇 សូមចុចជ្រើសរើស **ឈ្មោះរឿង** ដែលអ្នកចង់លុប៖",
+                    reply_markup=kb,
+                )
+                return
+
+            if text == BTN_PREV_PAGE:
+                page = max(0, page - 1)
+                kb, cur_page, total_pages = drama_pagination_keyboard(dramas, page, 10)
+                state["page"] = cur_page
+                send_clean_message(
+                    message,
+                    f"📄 ទំព័រទី {cur_page + 1} / {total_pages} (សរុប {len(dramas)} រឿង)\n"
+                    "👇 សូមចុចជ្រើសរើស **ឈ្មោះរឿង** ដែលអ្នកចង់លុប៖",
+                    reply_markup=kb,
+                )
+                return
+
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                kb, cur_page, _ = drama_pagination_keyboard(dramas, page, 10)
+                send_clean_message(message, "❌ សូមចុចជ្រើសរើសឈ្មោះរឿងពីប៊ូតុងខាងក្រោម៖", reply_markup=kb)
+                return
+
+            state["drama_title"] = drama_title
+
+            if state.get("delete_mode") == "ALL":
+                state["step"] = "DEL_ALL_CONFIRM"
+                confirm_kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+                confirm_kb.add(
+                    KeyboardButton("✅ បាទ/ចាស លុបចោល"),
+                    KeyboardButton(BTN_CANCEL),
+                )
+                send_clean_message(
+                    message,
+                    f"⚠️ តើអ្នកពិតជាចង់លុបរឿង «{drama_title}» ({ensure_drama_code(drama_title)}) ទាំងមូលមែនទេ?\n"
+                    "(វីដេអូគ្រប់ភាគ, រូប Album, GIF និង Cover នឹងត្រូវលុបចេញពី Database និង Channel ទាំងអស់)",
+                    reply_markup=confirm_kb,
+                )
+            else:
+                state["step"] = "DEL_EP_WAIT_NUM"
+                send_clean_message(
+                    message,
+                    f"🎬 រឿង៖ {drama_title} ({ensure_drama_code(drama_title)})\n\n🔢 សូមវាយបញ្ចូល **លេខភាគ** ដែលអ្នកចង់លុប (ជាលេខគត់)៖",
+                    reply_markup=cancel_keyboard(),
+                )
+            return
+
+        if step == "DEL_ALL_CONFIRM":
+            if text == "✅ បាទ/ចាស លុបចោល":
+                _, msg = delete_entire_drama_in_db(state["drama_title"])
+                admin_states.pop(user_id, None)
+                send_clean_message(message, msg, reply_markup=main_menu_keyboard())
+            else:
+                admin_states.pop(user_id, None)
+                send_clean_message(message, "បានបោះបង់ការលុប។", reply_markup=main_menu_keyboard())
+            return
+
+        if step == "DEL_EP_WAIT_NUM":
+            if not text.isdigit() or int(text) < 1:
+                send_clean_message(message, "❌ សូមបញ្ចូលលេខភាគជា លេខគត់៖", reply_markup=cancel_keyboard())
+                return
+
+            ep_num = int(text)
+            _, msg = delete_single_episode_in_db(state["drama_title"], ep_num)
+            admin_states.pop(user_id, None)
+            send_clean_message(message, msg, reply_markup=main_menu_keyboard())
+            return
+
+        # =================================================
+        # FLOW 5: ពិនិត្យភាគរឿង (CHECK DRAMA BY TITLE OR CODE)
+        # =================================================
+        if step == "CHECK_WAIT_TITLE":
+            drama_title = resolve_drama_title_or_code(text)
+            if not drama_title:
+                send_clean_message(message, "❌ សូមវាយបញ្ចូលចំណងជើងរឿង ឬ CODE៖", reply_markup=cancel_keyboard())
+                return
+
+            admin_states.pop(user_id, None)
+            send_drama_episode_list(message, drama_title, reply_markup=main_menu_keyboard())
+            return
+
+    except Exception:
+        log.exception("Interactive workflow error")
+        send_clean_message(
+            message,
+            "❌ មានបញ្ហាបច្ចេកទេសកើតឡើង។ សូមពិនិត្យ Render Logs ឬចុច «❌ បោះបង់» ដើម្បីចាប់ផ្ដើមឡើងវិញ។",
+            reply_markup=cancel_keyboard(),
+        )
+
+
+# =====================================================
+# FASTAPI WEBHOOK & SELF-HEALING ENDPOINTS
+# =====================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_admins_from_db()
+    sync_all_existing_drama_codes()
+    ensure_webhook_active(force=True)
+    log.info("XFANSTER Admin Bot webhook configured & drama codes synced at startup.")
+    yield
+    log.info("Shutting down instance — keeping webhook active.")
+
+
+app = FastAPI(
+    title="XFANSTER Admin Bot",
+    version="5.0.0",
+    lifespan=lifespan,
+)
+
+
+@app.api_route("/", methods=["GET", "HEAD"])
+def home(background_tasks: BackgroundTasks):
+    background_tasks.add_task(ensure_webhook_active, False)
+    return {
+        "service": "XFANSTER Admin Bot",
+        "status": "running",
+    }
+
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health(background_tasks: BackgroundTasks):
+    background_tasks.add_task(ensure_webhook_active, False)
+    return {"status": "ok"}
+
+
+@app.get("/reset-webhook")
+def reset_webhook():
+    ensure_webhook_active(force=True)
+    info = bot.get_webhook_info()
+    return {
+        "ok": True,
+        "webhook_url": info.url,
+        "pending_update_count": info.pending_update_count,
+        "last_error_message": info.last_error_message,
+    }
+
+
+def process_telegram_update(payload: dict):
+    try:
+        update = telebot.types.Update.de_json(payload)
+        bot.process_new_updates([update])
+    except Exception:
+        log.exception("Background update processing failed")
+
+
+@app.post(WEBHOOK_PATH)
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
+    supplied_secret = request.headers.get(
+        "X-Telegram-Bot-Api-Secret-Token", ""
+    )
+
+    if WEBHOOK_SECRET and not secrets.compare_digest(supplied_secret, WEBHOOK_SECRET):
+        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
+    try:
+        payload = await request.json()
+        background_tasks.add_task(process_telegram_update, payload)
+        return JSONResponse({"ok": True})
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("Webhook request parsing failed")
+        raise HTTPException(status_code=500, detail="Update processing failed")
