@@ -725,7 +725,17 @@ def execute_user_bot_broadcast_async(
 
             for uid in user_ids:
                 delivered = False
-                markup = join_markup
+                is_member_now = is_required_channel_member(int(uid))
+                markup = (
+                    InlineKeyboardMarkup().add(
+                        InlineKeyboardButton(
+                            "▶️ មើលឥឡូវនេះ",
+                            callback_data=f"notif_watch_{watch_token}",
+                        )
+                    )
+                    if is_member_now and watch_token
+                    else join_markup
+                )
                 sent_message_id = None
 
                 if cover_msg_id:
@@ -771,7 +781,7 @@ def execute_user_bot_broadcast_async(
                         delivered = False
 
                 if delivered:
-                    if watch_token and sent_message_id:
+                    if watch_token and sent_message_id and not is_member_now:
                         PENDING_WATCH_AFTER_JOIN[int(uid)] = {
                             "drama_title": drama_title,
                             "ep_number": int(target_ep_num),
