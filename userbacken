@@ -2307,7 +2307,7 @@ def send_bot_chat_join_prompt(user_id: int, drama_title: str, ep_number: int = 1
         log.warning("Could not send join prompt to user %s", uid)
 
 
-def send_drama_episode(user_id, drama_title, ep_number):
+def send_drama_episode(user_id, drama_title, ep_number, success_notice_message_id: Optional[int] = None):
     uid = int(user_id)
     if not is_required_channel_member(uid):
         log.info("Blocked video delivery for non-member user %s", uid)
@@ -2384,6 +2384,13 @@ def send_drama_episode(user_id, drama_title, ep_number):
         )
         user_last_message[user_id] = sent.message_id
         track_trash_message(user_id, sent.message_id)
+
+        # Delete the join-success notice only after Telegram confirms the video was sent.
+        if success_notice_message_id:
+            try:
+                bot.delete_message(chat_id=uid, message_id=int(success_notice_message_id))
+            except Exception:
+                log.warning("Could not delete join-success notice %s for user %s", success_notice_message_id, uid)
 
     except Exception:
         log.exception("Telegram copy_message failed")
@@ -2505,17 +2512,24 @@ def complete_pending_watch_after_join(user_id: int, pending: Optional[dict], sou
         except Exception:
             pass
 
+    success_notice_message_id = None
     try:
-        bot.send_message(
+        success_notice = bot.send_message(
             uid,
             "✅ <b>ចូល Channel/Group បានជោគជ័យ!</b>\n\n🎬 កំពុងផ្ញើវីដេអូជូនអ្នក...",
             parse_mode="HTML",
         )
+        success_notice_message_id = success_notice.message_id
     except Exception:
         log.exception("Could not send join success message to user %s", uid)
 
     log.info("Join completed for user %s via %s; delivering %s episode %s", uid, source, drama_title, ep_number)
-    send_drama_episode(uid, drama_title, ep_number)
+    send_drama_episode(
+        uid,
+        drama_title,
+        ep_number,
+        success_notice_message_id=success_notice_message_id,
+    )
 
 
 @bot.chat_join_request_handler()
