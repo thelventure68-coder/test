@@ -2487,9 +2487,40 @@ def build_candidate_admin_targets() -> list[int]:
 # Telegram commands & handlers
 # --------------------------------------------------
 
+def complete_pending_watch_after_join(user_id: int, pending: Optional[dict], source: str = "membership_update") -> None:
+    """Notify the user that joining succeeded, then deliver the pending episode exactly once."""
+    if not pending:
+        return
+    uid = int(user_id)
+    drama_title = str(pending.get("drama_title") or "").strip()
+    ep_number = int(pending.get("ep_number") or 1)
+    if not drama_title:
+        return
+
+    # Remove the old join/notification prompt so the success message and video are clear.
+    old_msg_id = pending.get("notif_msg_id")
+    if old_msg_id:
+        try:
+            bot.delete_message(chat_id=uid, message_id=int(old_msg_id))
+        except Exception:
+            pass
+
+    try:
+        bot.send_message(
+            uid,
+            "✅ <b>ចូល Channel/Group បានជោគជ័យ!</b>\n\n🎬 កំពុងផ្ញើវីដេអូជូនអ្នក...",
+            parse_mode="HTML",
+        )
+    except Exception:
+        log.exception("Could not send join success message to user %s", uid)
+
+    log.info("Join completed for user %s via %s; delivering %s episode %s", uid, source, drama_title, ep_number)
+    send_drama_episode(uid, drama_title, ep_number)
+
+
 @bot.chat_join_request_handler()
 def handle_user_chat_join_request(join_req):
-    """Approve a channel join request and reveal Watch; never auto-send the video."""
+    """Approve the required Channel/Group join request, then notify and send the pending episode."""
     try:
         uid = int(join_req.from_user.id)
         cid = int(join_req.chat.id)
@@ -2501,25 +2532,17 @@ def handle_user_chat_join_request(join_req):
         try:
             bot.approve_chat_join_request(cid, uid)
         except Exception:
-            log.exception("Could not approve channel join request for user %s", uid)
+            log.exception("Could not approve channel/group join request for user %s", uid)
             return
         pending = PENDING_WATCH_AFTER_JOIN.pop(uid, None)
-        if pending and pending.get("watch_token") and pending.get("notif_msg_id"):
-            try:
-                bot.edit_message_reply_markup(
-                    chat_id=uid,
-                    message_id=int(pending["notif_msg_id"]),
-                    reply_markup=build_bot_chat_watch_markup(str(pending["watch_token"])),
-                )
-            except Exception:
-                log.exception("Could not reveal Watch button after join request for user %s", uid)
+        complete_pending_watch_after_join(uid, pending, "join_request")
     except Exception:
         log.exception("Error in handle_user_chat_join_request")
 
 
 @bot.chat_member_handler()
 def handle_user_chat_member_update(update):
-    """When a user joins the required Channel, reveal the Watch button on their notification."""
+    """When a user joins the required Channel/Group, notify them and send their pending episode."""
     try:
         new_member = getattr(update, "new_chat_member", None)
         if not new_member or not getattr(new_member, "user", None):
@@ -2535,16 +2558,7 @@ def handle_user_chat_member_update(update):
             status == "restricted" and bool(getattr(new_member, "is_member", False))
         ):
             pending = PENDING_WATCH_AFTER_JOIN.pop(uid, None)
-            if pending and pending.get("watch_token") and pending.get("notif_msg_id"):
-                try:
-                    bot.edit_message_reply_markup(
-                        chat_id=uid,
-                        message_id=int(pending["notif_msg_id"]),
-                        reply_markup=build_bot_chat_watch_markup(str(pending["watch_token"])),
-                    )
-                    log.info("Revealed Watch button after user %s joined required channel", uid)
-                except Exception:
-                    log.exception("Could not reveal Watch button for user %s", uid)
+            complete_pending_watch_after_join(uid, pending, "chat_member")
         elif status in {"left", "kicked"}:
             PENDING_JOIN_REQUEST_USERS.discard((cid, uid))
     except Exception:
