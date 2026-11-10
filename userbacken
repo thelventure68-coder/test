@@ -2507,6 +2507,10 @@ def handle_user_chat_member_update(update):
             return
         uid = int(new_member.user.id)
         cid = int(update.chat.id) if getattr(update, "chat", None) else 0
+        required_id, required_link = get_required_channel_config(force_refresh=True)
+        allowed_channel_ids, _ = _build_strict_channel_id_candidates(required_id, required_link)
+        if cid not in {int(x) for x in allowed_channel_ids}:
+            return
         status = str(getattr(new_member, "status", "") or "").lower()
         if status in {"member", "administrator", "creator", "owner"} or (
             status == "restricted" and bool(getattr(new_member, "is_member", False))
